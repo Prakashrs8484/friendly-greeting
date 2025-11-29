@@ -1,0 +1,10 @@
+const r = require('express').Router();
+const auth = require('../middleware/auth');
+const c = require('../controllers/ai.controller');
+r.post('/finance', auth, c.financeChat);
+r.post('/career', auth, c.careerChat);
+r.post('/health', auth, c.healthChat);
+r.post('/nutrition', auth, c.nutritionChat);
+r.post('/lifestyle', auth, c.lifestyleChat);
+r.post('/notes', auth, c.notesChat);
+module.exports = r;
