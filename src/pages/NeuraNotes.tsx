@@ -3,6 +3,9 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import AgentChat from "@/components/AgentChat";
+import { NoteViewModal } from "@/components/notes/NoteViewModal";
+import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
+import { NoteCardSkeleton } from "@/components/notes/NoteCardSkeleton";
 
 import {
   Card,
@@ -17,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/hooks/use-toast";
 
 import {
   BookOpen,
@@ -28,19 +32,34 @@ import {
   Lightbulb,
   FileText,
   Tag,
+  AlertCircle,
 } from "lucide-react";
 
 import { useNotes, NoteDTO } from "@/hooks/useNotes";
 
 const NeuraNotes = () => {
   const [diaryLocked, setDiaryLocked] = useState(true);
-
-  // HOOK for backend notes
-  const { notes, loading, error, createNote } = useNotes();
+  const {
+    notes,
+    loading,
+    error,
+    createNote,
+    updateNote,
+    removeNote,
+    searchNotes,
+    searchResults,
+    searching,
+    clearSearch,
+  } = useNotes();
 
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Modal state
+  const [selectedNote, setSelectedNote] = useState<NoteDTO | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const categories = [
     { id: "all", label: "All Notes", icon: FileText },
@@ -51,10 +70,10 @@ const NeuraNotes = () => {
     { id: "daily-learnings", label: "Daily Learnings", icon: Calendar },
   ];
 
-  // Save note to backend
   const handleSaveNote = async () => {
     if (!noteTitle.trim() || !noteContent.trim()) return;
 
+    setSaving(true);
     try {
       await createNote({
         title: noteTitle,
@@ -65,15 +84,38 @@ const NeuraNotes = () => {
 
       setNoteTitle("");
       setNoteContent("");
+      toast({ title: "Note saved", description: "Your note has been created successfully." });
     } catch (err) {
       console.error("Failed to save note:", err);
+      toast({ title: "Error", description: "Failed to save note. Please try again.", variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
+  const handleNoteClick = (note: NoteDTO) => {
+    setSelectedNote(note);
+    setModalOpen(true);
+  };
+
+  const handleUpdateNote = async (id: string, payload: Partial<{ title: string; content: string }>) => {
+    const updated = await updateNote(id, payload);
+    setSelectedNote(prev => prev ? { ...prev, ...updated, id: updated._id || updated.id } : null);
+    toast({ title: "Note updated", description: "Your changes have been saved." });
+    return updated;
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    await removeNote(id);
+    toast({ title: "Note deleted", description: "The note has been removed." });
+  };
+
+  // Determine which notes to display
+  const displayNotes = searchResults !== null ? searchResults : notes;
   const filteredNotes =
     selectedCategory === "all"
-      ? notes
-      : notes.filter((note) => note.category === selectedCategory);
+      ? displayNotes
+      : displayNotes.filter((note) => note.category === selectedCategory);
 
   return (
     <DashboardLayout>
@@ -99,6 +141,21 @@ const NeuraNotes = () => {
         <div className="workspace-grid">
           {/* LEFT CONTENT */}
           <div className="workspace-content-column">
+            {/* Search Bar */}
+            <NotesSearchBar
+              onSearch={searchNotes}
+              onClear={clearSearch}
+              searching={searching}
+              hasResults={searchResults !== null}
+            />
+
+            {/* Search Results Indicator */}
+            {searchResults !== null && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Showing {searchResults.length} search result{searchResults.length !== 1 ? "s" : ""}</span>
+              </div>
+            )}
+
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card className="card-hover card-glass">
@@ -170,10 +227,10 @@ const NeuraNotes = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     onClick={handleSaveNote}
-                    disabled={!noteTitle.trim() || !noteContent.trim()}
+                    disabled={!noteTitle.trim() || !noteContent.trim() || saving}
                     className="action-button"
                   >
-                    Save Note
+                    {saving ? "Saving..." : "Save Note"}
                   </Button>
 
                   <Button
@@ -189,6 +246,16 @@ const NeuraNotes = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Error State */}
+            {error && (
+              <Card className="border-destructive/50 bg-destructive/5">
+                <CardContent className="flex items-center gap-3 py-4">
+                  <AlertCircle className="w-5 h-5 text-destructive" />
+                  <p className="text-sm text-destructive">{error}</p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Notes List */}
             <Card className="card-glass">
@@ -234,13 +301,17 @@ const NeuraNotes = () => {
                         </Button>
                       </div>
                     ) : loading ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        Loading notes...
+                      <div className="space-y-3">
+                        <NoteCardSkeleton />
+                        <NoteCardSkeleton />
+                        <NoteCardSkeleton />
                       </div>
                     ) : filteredNotes.length === 0 ? (
                       <div className="text-center py-12">
                         <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">No notes yet</p>
+                        <p className="text-muted-foreground">
+                          {searchResults !== null ? "No matching notes found" : "No notes yet"}
+                        </p>
                       </div>
                     ) : (
                       filteredNotes.map((note) => {
@@ -249,7 +320,11 @@ const NeuraNotes = () => {
                           : new Date();
 
                         return (
-                          <Card key={note.id} className="card-hover">
+                          <Card
+                            key={note.id}
+                            className="card-hover cursor-pointer transition-all hover:border-primary/30"
+                            onClick={() => handleNoteClick(note)}
+                          >
                             <CardHeader className="pb-3">
                               <div className="flex items-start justify-between gap-2">
                                 <CardTitle className="text-base">
@@ -272,12 +347,10 @@ const NeuraNotes = () => {
                             </CardHeader>
 
                             <CardContent>
-                              {/* CONTENT PREVIEW */}
                               <p className="text-sm text-foreground/80 line-clamp-3">
                                 {note.content}
                               </p>
 
-                              {/* AI SUMMARY */}
                               {note.summary && (
                                 <p className="text-xs text-foreground/60 mt-2 line-clamp-2">
                                   <strong>Summary: </strong>
@@ -285,7 +358,6 @@ const NeuraNotes = () => {
                                 </p>
                               )}
 
-                              {/* EMOTION */}
                               {note.emotion?.label && (
                                 <Badge
                                   variant="secondary"
@@ -296,7 +368,6 @@ const NeuraNotes = () => {
                                 </Badge>
                               )}
 
-                              {/* TAGS */}
                               {note.tags?.length > 0 && (
                                 <div className="flex gap-1 mt-3">
                                   {note.tags.map((tag, idx) => (
@@ -344,6 +415,19 @@ const NeuraNotes = () => {
           </div>
         </div>
       </div>
+
+      {/* Note View/Edit Modal */}
+      <NoteViewModal
+        note={selectedNote}
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedNote(null);
+        }}
+        onUpdate={handleUpdateNote}
+        onDelete={handleDeleteNote}
+        categories={categories}
+      />
     </DashboardLayout>
   );
 };
