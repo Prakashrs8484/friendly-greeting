@@ -41,3 +41,7 @@ export async function deleteNoteApi(id: string) {
 export async function getNoteApi(id: string) {
   return request(`/api/notes/${id}`);
 }
+
+export async function searchNotesApi(query: string) {
+  return request("/api/notes/search", { method: "POST", body: JSON.stringify({ query }) });
+}

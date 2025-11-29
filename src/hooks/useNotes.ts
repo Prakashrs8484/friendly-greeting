@@ -1,10 +1,10 @@
 // src/hooks/useNotes.ts
 import { useEffect, useState, useCallback } from "react";
-import { fetchNotes, createNoteApi, updateNoteApi, deleteNoteApi, getNoteApi } from "@/lib/api";
+import { fetchNotes, createNoteApi, updateNoteApi, deleteNoteApi, getNoteApi, searchNotesApi } from "@/lib/api";
 
 export interface NoteDTO {
   _id?: string;
-  id?: string; // fallback
+  id?: string;
   title: string;
   content: string;
   category: string;
@@ -19,14 +19,15 @@ export function useNotes() {
   const [notes, setNotes] = useState<NoteDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<NoteDTO[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchNotes();
-      // normalize _id -> id
-      const normalized: NoteDTO[] = res.map((n: any) => ({
+      const res = await fetchNotes() as NoteDTO[];
+      const normalized: NoteDTO[] = res.map((n: NoteDTO) => ({
         ...n,
         id: n._id || n.id,
       }));
@@ -43,8 +44,7 @@ export function useNotes() {
   const createNote = useCallback(async (payload: { title: string; content: string; category?: string; tags?: string[] }) => {
     setError(null);
     try {
-      const created = await createNoteApi(payload);
-      // normalize and add to state
+      const created = await createNoteApi(payload) as NoteDTO;
       setNotes(n => [{ ...created, id: created._id || created.id }, ...n]);
       return created;
     } catch (err: any) {
@@ -53,10 +53,10 @@ export function useNotes() {
     }
   }, []);
 
-  const updateNote = useCallback(async (id: string, payload: any) => {
+  const updateNote = useCallback(async (id: string, payload: Partial<{ title: string; content: string; category: string; tags: string[] }>) => {
     setError(null);
     try {
-      const updated = await updateNoteApi(id, payload);
+      const updated = await updateNoteApi(id, payload) as NoteDTO;
       setNotes(n => n.map(x => (x.id === id || x._id === id ? { ...updated, id: updated._id || updated.id } : x)));
       return updated;
     } catch (err: any) {
@@ -79,7 +79,7 @@ export function useNotes() {
   const refreshOne = useCallback(async (id: string) => {
     setError(null);
     try {
-      const note = await getNoteApi(id);
+      const note = await getNoteApi(id) as NoteDTO;
       setNotes(n => n.map(x => (x.id === id || x._id === id ? { ...note, id: note._id || note.id } : x)));
     } catch (err: any) {
       setError(err.message);
@@ -87,5 +87,28 @@ export function useNotes() {
     }
   }, []);
 
-  return { notes, loading, error, load, createNote, updateNote, removeNote, refreshOne };
+  const searchNotes = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    setSearching(true);
+    setError(null);
+    try {
+      const res = await searchNotesApi(query) as NoteDTO[];
+      const normalized = res.map((n: NoteDTO) => ({ ...n, id: n._id || n.id }));
+      setSearchResults(normalized);
+    } catch (err: any) {
+      setError(err.message);
+      setSearchResults(null);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setSearchResults(null);
+  }, []);
+
+  return { notes, loading, error, load, createNote, updateNote, removeNote, refreshOne, searchNotes, searchResults, searching, clearSearch };
 }
