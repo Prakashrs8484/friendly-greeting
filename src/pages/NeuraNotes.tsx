@@ -66,20 +66,35 @@ const NeuraNotes = () => {
   const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
     onTranscription: (text) => {
       setNoteContent((prev) => {
-        const newContent = prev ? `${prev}\n\n${text}` : text;
+        const cleanedPrev = (prev ?? "").trimEnd(); // keep trailing text intact but remove trailing whitespace
+        const cleanedNew = text.trim();
+    
+        // If previous is empty, just use the new text.
+        // Otherwise append with a single space so words flow together on same line.
+        const newContent =
+          cleanedPrev.length === 0 ? cleanedNew : `${cleanedPrev} ${cleanedNew}`;
+    
+        // move scrollbar / caret to end after DOM update
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+            // move caret to the end so user sees appended text
+            textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newContent.length;
           }
-        }, 0);
+        }, 50);
+    
         return newContent;
       });
-      toast({ title: "Transcription added", description: "Your speech has been converted to text." });
-    },
+    
+      toast({
+        title: "Transcription added",
+        description: "Your speech has been converted to text.",
+      });
+    },    
     onError: (error) => {
       toast({ title: "Dictation Error", description: error, variant: "destructive" });
     },
-  });
+  }); 
 
   // Modal state
   const [selectedNote, setSelectedNote] = useState<NoteDTO | null>(null);
@@ -101,11 +116,11 @@ const NeuraNotes = () => {
     try {
       await createNote({
         title: noteTitle,
-        content: noteContent,
+        content: noteContent.trim(), // ensures transcription is included
         category: selectedCategory === "all" ? "daily-learnings" : selectedCategory,
         tags: [],
       });
-
+      
       setNoteTitle("");
       setNoteContent("");
       toast({ title: "Note saved", description: "Your note has been created successfully." });

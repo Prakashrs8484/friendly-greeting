@@ -13,6 +13,8 @@ const planningRoutes = require('./routes/planning.routes');
 const aiActionRoutes = require('./routes/aiAction.routes');
 const notesRoutes = require("./routes/notes.routes");
 const sttRoutes = require("./routes/stt.routes");
+const noteAiRoutes = require("./routes/noteAi.routes");
+const ttsRoutes = require("./routes/tts.routes");
 
 
 
@@ -25,16 +27,17 @@ app.use(morgan('dev'));
 connectDB();
 
 app.use('/api/auth', authRoutes);
+
 app.use('/api/finance', financeRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/context', contextRoutes);
 app.use("/api/planning", planningRoutes);
 app.use('/api/ai/action', aiActionRoutes);
 
-// IMPORTANT: mount correctly
-app.use("/api/notes", notesRoutes);        // for CRUD
-
-app.use("/api/notes/stt", sttRoutes);
+app.use("/api/notes", notesRoutes);        
+app.use("/api/notes", noteAiRoutes);
+app.use("/api/notes", sttRoutes);
+app.use("/api/notes", ttsRoutes);
 
 
 app.get('/', (req, res) => res.json({ status: 'NeuraDesk backend (Option 1) running' }));
