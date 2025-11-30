@@ -39,8 +39,10 @@ import {
 
 import { useDictation } from "@/hooks/useDictation";
 import { RecordingIndicator } from "@/components/notes/RecordingIndicator";
+import { NoteAIActions } from "@/components/notes/NoteAIActions";
 
 import { useNotes, NoteDTO } from "@/hooks/useNotes";
+import { useNoteAI } from "@/hooks/useNoteAI";
 
 const NeuraNotes = () => {
   const [diaryLocked, setDiaryLocked] = useState(true);
@@ -66,26 +68,18 @@ const NeuraNotes = () => {
   const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
     onTranscription: (text) => {
       setNoteContent((prev) => {
-        const cleanedPrev = (prev ?? "").trimEnd(); // keep trailing text intact but remove trailing whitespace
+        const cleanedPrev = (prev ?? "").trimEnd();
         const cleanedNew = text.trim();
-    
-        // If previous is empty, just use the new text.
-        // Otherwise append with a single space so words flow together on same line.
         const newContent =
           cleanedPrev.length === 0 ? cleanedNew : `${cleanedPrev} ${cleanedNew}`;
-    
-        // move scrollbar / caret to end after DOM update
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
-            // move caret to the end so user sees appended text
             textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newContent.length;
           }
         }, 50);
-    
         return newContent;
       });
-    
       toast({
         title: "Transcription added",
         description: "Your speech has been converted to text.",
@@ -94,7 +88,60 @@ const NeuraNotes = () => {
     onError: (error) => {
       toast({ title: "Dictation Error", description: error, variant: "destructive" });
     },
-  }); 
+  });
+
+  // AI features hook
+  const {
+    improving,
+    paraphrasing,
+    ttsLoading,
+    playing,
+    improveGrammar,
+    paraphrase,
+    readAloud,
+    stopAudio,
+  } = useNoteAI();
+
+  const handleImproveGrammar = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const improved = await improveGrammar(noteContent);
+      setNoteContent(improved);
+      toast({ title: "Grammar improved!", description: "Your text has been enhanced." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to improve grammar.", variant: "destructive" });
+    }
+  };
+
+  const handleParaphrase = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const paraphrased = await paraphrase(noteContent);
+      setNoteContent(paraphrased);
+      toast({ title: "Note paraphrased!", description: "Your text has been rewritten." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to paraphrase.", variant: "destructive" });
+    }
+  };
+
+  const handleReadAloud = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      toast({ title: "Playing audio…", description: "Reading your note aloud." });
+      await readAloud(noteContent);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to read aloud.", variant: "destructive" });
+    }
+  };
 
   // Modal state
   const [selectedNote, setSelectedNote] = useState<NoteDTO | null>(null);
@@ -282,10 +329,23 @@ const NeuraNotes = () => {
                   className="min-h-[200px] resize-none"
                 />
 
+                {/* AI Action Buttons */}
+                <NoteAIActions
+                  onImprove={handleImproveGrammar}
+                  onParaphrase={handleParaphrase}
+                  onReadAloud={handleReadAloud}
+                  onStopAudio={stopAudio}
+                  improving={improving}
+                  paraphrasing={paraphrasing}
+                  ttsLoading={ttsLoading}
+                  playing={playing}
+                  disabled={!noteContent.trim() || isRecording || isProcessing}
+                />
+
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     onClick={handleSaveNote}
-                    disabled={!noteTitle.trim() || !noteContent.trim() || saving || isRecording || isProcessing}
+                    disabled={!noteTitle.trim() || !noteContent.trim() || saving || isRecording || isProcessing || improving || paraphrasing}
                     className="action-button"
                   >
                     {saving ? "Saving..." : "Save Note"}
