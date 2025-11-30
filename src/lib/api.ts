@@ -45,3 +45,31 @@ export async function getNoteApi(id: string) {
 export async function searchNotesApi(query: string) {
   return request("/api/notes/search", { method: "POST", body: JSON.stringify({ query }) });
 }
+
+// AI Note Features
+export async function improveGrammarApi(text: string): Promise<{ improved: string }> {
+  return request("/api/notes/improve", { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export async function paraphraseNoteApi(text: string): Promise<{ paraphrased: string }> {
+  return request("/api/notes/paraphrase", { method: "POST", body: JSON.stringify({ text }) });
+}
+
+export async function textToSpeechApi(text: string): Promise<Blob> {
+  const token = getToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(API_BASE + "/api/notes/tts", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text }),
+  });
+  
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API ${res.status} ${res.statusText} - ${body}`);
+  }
+  
+  return res.blob();
+}
