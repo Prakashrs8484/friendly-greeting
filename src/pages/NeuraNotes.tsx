@@ -1,6 +1,6 @@
 // src/pages/NeuraNotes.tsx
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import AgentChat from "@/components/AgentChat";
 import { NoteViewModal } from "@/components/notes/NoteViewModal";
@@ -33,7 +33,12 @@ import {
   FileText,
   Tag,
   AlertCircle,
+  Mic,
+  MicOff,
 } from "lucide-react";
+
+import { useDictation } from "@/hooks/useDictation";
+import { RecordingIndicator } from "@/components/notes/RecordingIndicator";
 
 import { useNotes, NoteDTO } from "@/hooks/useNotes";
 
@@ -56,6 +61,25 @@ const NeuraNotes = () => {
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
+    onTranscription: (text) => {
+      setNoteContent((prev) => {
+        const newContent = prev ? `${prev}\n\n${text}` : text;
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+          }
+        }, 0);
+        return newContent;
+      });
+      toast({ title: "Transcription added", description: "Your speech has been converted to text." });
+    },
+    onError: (error) => {
+      toast({ title: "Dictation Error", description: error, variant: "destructive" });
+    },
+  });
 
   // Modal state
   const [selectedNote, setSelectedNote] = useState<NoteDTO | null>(null);
@@ -210,14 +234,33 @@ const NeuraNotes = () => {
               </CardHeader>
 
               <CardContent className="space-y-4">
-                <Input
-                  placeholder="Note title..."
-                  value={noteTitle}
-                  onChange={(e) => setNoteTitle(e.target.value)}
-                  className="text-lg font-semibold"
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Note title..."
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    className="text-lg font-semibold flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant={isRecording ? "destructive" : "outline"}
+                    size="icon"
+                    onClick={toggleRecording}
+                    disabled={!isSupported || isProcessing}
+                    title={!isSupported ? "Microphone not supported" : isRecording ? "Stop recording" : "Start voice dictation"}
+                  >
+                    {isRecording ? (
+                      <MicOff className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+
+                <RecordingIndicator isRecording={isRecording} isProcessing={isProcessing} />
 
                 <Textarea
+                  ref={textareaRef}
                   placeholder="Start writing... (Supports markdown)"
                   value={noteContent}
                   onChange={(e) => setNoteContent(e.target.value)}
@@ -227,7 +270,7 @@ const NeuraNotes = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     onClick={handleSaveNote}
-                    disabled={!noteTitle.trim() || !noteContent.trim() || saving}
+                    disabled={!noteTitle.trim() || !noteContent.trim() || saving || isRecording || isProcessing}
                     className="action-button"
                   >
                     {saving ? "Saving..." : "Save Note"}
