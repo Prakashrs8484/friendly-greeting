@@ -117,18 +117,36 @@ const NeuraNotes = () => {
   };
 
   const handleParaphrase = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+    if (!noteContent || !noteContent.trim()) {
+      toast({
+        title: "No content",
+        description: "Write something first.",
+        variant: "destructive"
+      });
       return;
     }
+  
     try {
-      const paraphrased = await paraphrase(noteContent);
-      setNoteContent(paraphrased);
-      toast({ title: "Note paraphrased!", description: "Your text has been rewritten." });
+      const result = await paraphrase(noteContent);
+  
+      // result should be: { paraphrased: "..." }
+      const paraphrasedText = await paraphrase(noteContent);
+      setNoteContent(paraphrasedText);
+
+      toast({
+        title: "Note paraphrased!",
+        description: "Your text has been rewritten."
+      });
+  
     } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to paraphrase.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to paraphrase. Please try again.",
+        variant: "destructive"
+      });
     }
   };
+  
 
   const handleReadAloud = async () => {
     if (!noteContent.trim()) {

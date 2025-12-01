@@ -22,15 +22,10 @@ export function useNoteAI() {
   }, []);
 
   const paraphrase = useCallback(async (text: string): Promise<string> => {
-    if (!text.trim()) throw new Error("No content to paraphrase");
-    setParaphrasing(true);
-    try {
-      const result = await paraphraseNoteApi(text);
-      return result.paraphrased;
-    } finally {
-      setParaphrasing(false);
-    }
+    const { paraphrased } = await paraphraseNoteApi(text);
+    return paraphrased;
   }, []);
+  
 
   const readAloud = useCallback(async (text: string): Promise<void> => {
     if (!text.trim()) throw new Error("No content to read");

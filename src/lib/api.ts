@@ -52,8 +52,13 @@ export async function improveGrammarApi(text: string): Promise<{ improved: strin
 }
 
 export async function paraphraseNoteApi(text: string): Promise<{ paraphrased: string }> {
-  return request("/api/notes/paraphrase", { method: "POST", body: JSON.stringify({ text }) });
+  return request("/api/notes/paraphrase", {
+    method: "POST",
+    body: JSON.stringify({ text })
+  });
 }
+
+
 
 export async function textToSpeechApi(text: string): Promise<Blob> {
   const token = getToken();
