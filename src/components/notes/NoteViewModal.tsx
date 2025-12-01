@@ -12,6 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Trash2, X, Save, Tag } from "lucide-react";
 import { NoteDTO } from "@/hooks/useNotes";
+import { useNoteAI } from "@/hooks/useNoteAI";
+import { NoteAIActions } from "@/components/notes/NoteAIActions";
+import { useToast } from "@/hooks/use-toast";
 
 interface NoteViewModalProps {
   note: NoteDTO | null;
@@ -28,6 +31,8 @@ export function NoteViewModal({ note, open, onClose, onUpdate, onDelete, categor
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
+  const { improving, paraphrasing, ttsLoading, playing, improveGrammar, paraphrase, readAloud, stopAudio } = useNoteAI();
 
   const startEditing = () => {
     if (note) {
@@ -69,6 +74,47 @@ export function NoteViewModal({ note, open, onClose, onUpdate, onDelete, categor
     }
   };
 
+  const handleImprove = async () => {
+    if (!editContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const improved = await improveGrammar(editContent);
+      setEditContent(improved);
+      toast({ title: "Grammar improved!", description: "Your text has been enhanced." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to improve grammar.", variant: "destructive" });
+    }
+  };
+
+  const handleParaphrase = async () => {
+    if (!editContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const paraphrased = await paraphrase(editContent);
+      setEditContent(paraphrased);
+      toast({ title: "Note paraphrased!", description: "Your text has been rewritten." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to paraphrase.", variant: "destructive" });
+    }
+  };
+
+  const handleReadAloud = async () => {
+    if (!editContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      await readAloud(editContent);
+      toast({ title: "Playing audio", description: "Reading your note aloud..." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to play audio.", variant: "destructive" });
+    }
+  };
+
   if (!note) return null;
 
   const created = note.createdAt ? new Date(note.createdAt) : new Date();
@@ -99,12 +145,25 @@ export function NoteViewModal({ note, open, onClose, onUpdate, onDelete, categor
         <div className="space-y-4 mt-4">
           {/* Content */}
           {isEditing ? (
-            <Textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              className="min-h-[200px]"
-              placeholder="Note content..."
-            />
+            <>
+              <Textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="min-h-[200px]"
+                placeholder="Note content..."
+              />
+              <NoteAIActions
+                onImprove={handleImprove}
+                onParaphrase={handleParaphrase}
+                onReadAloud={handleReadAloud}
+                onStopAudio={stopAudio}
+                improving={improving}
+                paraphrasing={paraphrasing}
+                ttsLoading={ttsLoading}
+                playing={playing}
+                disabled={!editContent.trim()}
+              />
+            </>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <p className="whitespace-pre-wrap text-foreground/90">{note.content}</p>
