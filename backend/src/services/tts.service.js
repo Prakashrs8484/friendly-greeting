@@ -1,31 +1,30 @@
 const axios = require("axios");
-require("dotenv").config();
 
-const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
-const DEFAULT_VOICE = process.env.DEFAULT_TTS_VOICE || "JBFqnCBsd6RMkjVDRZzb"; // Free voice
-
-exports.textToSpeech = async (text, voiceId = DEFAULT_VOICE) => {
+exports.generateSpeech = async ({ text, voiceId, modelId = "eleven_multilingual_v2", outputFormat = "mp3_44100_128" }) => {
   try {
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
+
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=${outputFormat}`;
 
     const response = await axios.post(
       url,
       {
-        text: text,
-        model_id: "eleven_multilingual_v2",
+        text,
+        model_id: modelId
       },
       {
         headers: {
-          "xi-api-key": ELEVEN_API_KEY,
-          "Content-Type": "application/json",
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json"
         },
-        responseType: "arraybuffer", // IMPORTANT: audio output
+        responseType: "arraybuffer"  // IMPORTANT → audio stream support
       }
     );
 
-    return response.data; // audio buffer
-  } catch (error) {
-    console.error("TTS Error:", error.response?.data || error.message);
-    throw new Error("Failed to generate speech");
+    return response.data; // binary buffer
+  } catch (err) {
+    console.error("TTS Service Error:", err.response?.data || err.message);
+    throw new Error("TTS generation failed");
   }
 };

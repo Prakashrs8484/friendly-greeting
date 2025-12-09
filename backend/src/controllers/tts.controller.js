@@ -1,23 +1,19 @@
-const { textToSpeech } = require("../services/tts.service");
+const { generateSpeech } = require("../services/tts.service");
 
-exports.generateSpeech = async (req, res) => {
+exports.textToSpeechController = async (req, res) => {
   try {
-    const { text, voiceId } = req.body;
-
-    if (!text) {
-      return res.status(400).json({ error: "Text is required" });
+    const { text} = req.body;
+    const voiceId=process.env.DEFAULT_TTS_VOICE;
+    if (!text || !voiceId) {
+      return res.status(400).json({ error: "text and voiceId required" });
     }
+    const audioBuffer = await generateSpeech({ text, voiceId });
 
-    const audioBuffer = await textToSpeech(text, voiceId);
-
-    res.set({
-      "Content-Type": "audio/mpeg",
-      "Content-Disposition": 'attachment; filename="speech.mp3"',
-    });
-
+    res.setHeader("Content-Type", "audio/mpeg");
     return res.send(audioBuffer);
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error("TTS Controller Error:", err.response?.data || err.message || err);
+    return res.status(500).json({ error: err.message });
   }
 };

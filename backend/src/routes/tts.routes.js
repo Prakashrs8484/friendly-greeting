@@ -1,8 +1,8 @@
-const router = require("express").Router();
-const auth = require("../middleware/auth");
-const { generateSpeech } = require("../controllers/tts.controller");
+const express = require("express");
+const router = express.Router();
 
-// POST /api/notes/tts
-router.post("/tts", auth, generateSpeech);
+const { textToSpeechController } = require("../controllers/tts.controller");
+
+router.post("/tts", textToSpeechController);
 
 module.exports = router;
