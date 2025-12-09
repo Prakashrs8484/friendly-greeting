@@ -1,12 +1,6 @@
-// src/pages/NeuraNotes.tsx
-
-import { useState, useRef } from "react";
+// src/pages/NeuraNotes.tsx - Hub page for all note types
+import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
-import AgentChat from "@/components/AgentChat";
-import { NoteViewModal } from "@/components/notes/NoteViewModal";
-import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
-import { NoteCardSkeleton } from "@/components/notes/NoteCardSkeleton";
-
 import {
   Card,
   CardContent,
@@ -14,717 +8,187 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/hooks/use-toast";
-
+import { Button } from "@/components/ui/button";
 import {
   BookOpen,
-  Lock,
-  Unlock,
-  Plus,
-  TrendingUp,
-  Calendar,
+  PenTool,
+  GraduationCap,
+  StickyNote,
+  ArrowRight,
+  Sparkles,
+  MapPin,
+  User,
+  MessageSquare,
   Lightbulb,
-  FileText,
-  Tag,
-  AlertCircle,
-  Mic,
-  MicOff,
+  Expand,
+  ListTree,
+  List,
+  CheckSquare,
+  Shield,
+  GitCompare,
+  Wand2,
+  RefreshCw,
+  Volume2,
+  Calendar,
 } from "lucide-react";
-
-import { useDictation } from "@/hooks/useDictation";
-import { RecordingIndicator } from "@/components/notes/RecordingIndicator";
-import { NoteAIActions } from "@/components/notes/NoteAIActions";
-import { AIToolsMenu } from "@/components/notes/AIToolsMenu";
-
-import { useNotes, NoteDTO } from "@/hooks/useNotes";
-import { useNoteAI } from "@/hooks/useNoteAI";
-import { useAdvancedNoteAI } from "@/hooks/useAdvancedNoteAI";
-import { RewriteMode, DialogueStyle, IdeaMode } from "@/lib/noteAiApi";
+import { useNotes } from "@/hooks/useNotes";
 
 const NeuraNotes = () => {
-  const [diaryLocked, setDiaryLocked] = useState(true);
-  const {
-    notes,
-    loading,
-    error,
-    createNote,
-    updateNote,
-    removeNote,
-    searchNotes,
-    searchResults,
-    searching,
-    clearSearch,
-  } = useNotes();
+  const { notes } = useNotes();
 
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteContent, setNoteContent] = useState("");
-  const [saving, setSaving] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const writerNotes = notes.filter(
+    (n) => ["creative", "story", "poetry", "script"].includes(n.category || "") || n.tags?.includes("writer")
+  );
+  const academicNotes = notes.filter(
+    (n) => ["academic", "research", "vocabulary", "interview"].includes(n.category || "") || n.tags?.includes("academic")
+  );
+  const generalNotes = notes.filter(
+    (n) => !["creative", "story", "poetry", "script", "academic", "research", "vocabulary", "interview"].includes(n.category || "") &&
+           !n.tags?.includes("writer") && !n.tags?.includes("academic")
+  );
 
-  const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
-    onTranscription: (text) => {
-      setNoteContent((prev) => {
-        const cleanedPrev = (prev ?? "").trimEnd();
-        const cleanedNew = text.trim();
-        const newContent =
-          cleanedPrev.length === 0 ? cleanedNew : `${cleanedPrev} ${cleanedNew}`;
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
-            textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newContent.length;
-          }
-        }, 50);
-        return newContent;
-      });
-      toast({
-        title: "Transcription added",
-        description: "Your speech has been converted to text.",
-      });
-    },    
-    onError: (error) => {
-      toast({ title: "Dictation Error", description: error, variant: "destructive" });
+  const noteSpaces = [
+    {
+      title: "Writer's Studio",
+      description: "Craft stories, poems, and scripts with creative AI tools",
+      icon: PenTool,
+      path: "/notes/writer",
+      color: "from-violet-500/20 to-purple-500/20",
+      borderColor: "border-violet-500/30",
+      iconColor: "text-violet-500",
+      count: writerNotes.length,
+      features: [
+        { icon: Sparkles, label: "Creative Rewrite (10 styles)" },
+        { icon: Expand, label: "Expand Thought" },
+        { icon: MapPin, label: "Scene Builder" },
+        { icon: User, label: "Character Builder" },
+        { icon: MessageSquare, label: "Dialogue Enhancer" },
+        { icon: Lightbulb, label: "Idea Generator" },
+      ],
     },
-  });
-
-  // AI features hook
-  const {
-    improving,
-    paraphrasing,
-    ttsLoading,
-    playing,
-    improveGrammar,
-    paraphrase,
-    readAloud,
-    stopAudio,
-  } = useNoteAI();
-
-  // Advanced AI features hook
-  const advancedAI = useAdvancedNoteAI();
-
-  const handleImproveGrammar = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const improved = await improveGrammar(noteContent);
-      setNoteContent(improved);
-      toast({ title: "Grammar improved!", description: "Your text has been enhanced." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to improve grammar.", variant: "destructive" });
-    }
-  };
-
-  const handleParaphrase = async () => {
-    if (!noteContent || !noteContent.trim()) {
-      toast({
-        title: "No content",
-        description: "Write something first.",
-        variant: "destructive"
-      });
-      return;
-    }
-  
-    try {
-      const result = await paraphrase(noteContent);
-  
-      // result should be: { paraphrased: "..." }
-      const paraphrasedText = await paraphrase(noteContent);
-      setNoteContent(paraphrasedText);
-
-      toast({
-        title: "Note paraphrased!",
-        description: "Your text has been rewritten."
-      });
-  
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err?.message || "Failed to paraphrase. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-  
-
-  const handleReadAloud = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      toast({ title: "Playing audio…", description: "Reading your note aloud." });
-      await readAloud(noteContent);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to read aloud.", variant: "destructive" });
-    }
-  };
-
-  // Advanced AI Handlers
-  const handleRewrite = async (mode: RewriteMode) => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const result = await advancedAI.rewriteNote(noteContent, mode);
-      setNoteContent(result);
-      toast({ title: "Rewritten!", description: `Text rewritten in ${mode} style.` });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleExpand = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const result = await advancedAI.expandThought(noteContent);
-      setNoteContent(result);
-      toast({ title: "Expanded!", description: "Your thought has been expanded." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleEnhanceDialogue = async (style: DialogueStyle) => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const result = await advancedAI.enhanceDialogue(noteContent, style);
-      setNoteContent(result);
-      toast({ title: "Enhanced!", description: `Dialogue enhanced with ${style} style.` });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleStructure = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const result = await advancedAI.structureDocument(noteContent);
-      setNoteContent(result);
-      toast({ title: "Structured!", description: "Document has been organized." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleExtractBullets = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const bullets = await advancedAI.extractBullets(noteContent);
-      setNoteContent(bullets.map((b) => `• ${b}`).join("\n"));
-      toast({ title: "Extracted!", description: "Bullet points extracted." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleExtractActions = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const actions = await advancedAI.extractActions(noteContent);
-      const formatted = actions
-        .map((a) => `☐ ${a.action}${a.owner ? ` (@${a.owner})` : ""}${a.deadline ? ` [${a.deadline}]` : ""}`)
-        .join("\n");
-      setNoteContent(formatted);
-      toast({ title: "Extracted!", description: "Action items extracted." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleImproveAcademic = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const result = await advancedAI.improveAcademic(noteContent);
-      setNoteContent(result);
-      toast({ title: "Improved!", description: "Academic writing enhanced." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleStrengthen = async () => {
-    if (!noteContent.trim()) {
-      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
-      return;
-    }
-    try {
-      const result = await advancedAI.strengthenArgument(noteContent);
-      setNoteContent(result);
-      toast({ title: "Strengthened!", description: "Argument has been strengthened." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleCompare = async (textA: string, textB: string) => {
-    try {
-      const result = await advancedAI.compareTexts(textA, textB);
-      const formatted = [
-        "## Comparison Results\n",
-        "### Differences",
-        ...result.differences.map((d) => `- ${d}`),
-        "\n### Similarities",
-        ...result.similarities.map((s) => `- ${s}`),
-        "\n### Suggested Improvements",
-        ...result.improvements.map((i) => `- ${i}`),
-      ].join("\n");
-      setNoteContent(formatted);
-      toast({ title: "Compared!", description: "Comparison complete." });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-  };
-
-  // Modal state
-  const [selectedNote, setSelectedNote] = useState<NoteDTO | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-
-  const categories = [
-    { id: "all", label: "All Notes", icon: FileText },
-    { id: "diary", label: "Personal Diary", icon: Lock },
-    { id: "vocabulary", label: "Vocabulary Builder", icon: BookOpen },
-    { id: "academic", label: "Academic Notes", icon: Lightbulb },
-    { id: "interview", label: "Interview Prep", icon: TrendingUp },
-    { id: "daily-learnings", label: "Daily Learnings", icon: Calendar },
+    {
+      title: "General Notes",
+      description: "Quick notes, daily learnings, and personal diary",
+      icon: StickyNote,
+      path: "/notes/general",
+      color: "from-blue-500/20 to-cyan-500/20",
+      borderColor: "border-blue-500/30",
+      iconColor: "text-blue-500",
+      count: generalNotes.length,
+      features: [
+        { icon: Wand2, label: "Improve Grammar" },
+        { icon: RefreshCw, label: "Paraphrase" },
+        { icon: Volume2, label: "Read Aloud (TTS)" },
+        { icon: Calendar, label: "Daily Learnings" },
+      ],
+    },
+    {
+      title: "Academic Hub",
+      description: "Research notes, study materials, and interview prep",
+      icon: GraduationCap,
+      path: "/notes/academic",
+      color: "from-emerald-500/20 to-teal-500/20",
+      borderColor: "border-emerald-500/30",
+      iconColor: "text-emerald-500",
+      count: academicNotes.length,
+      features: [
+        { icon: ListTree, label: "Structure Document" },
+        { icon: List, label: "Extract Bullets" },
+        { icon: CheckSquare, label: "Extract Actions" },
+        { icon: GraduationCap, label: "Academic Improve" },
+        { icon: Shield, label: "Strengthen Argument" },
+        { icon: GitCompare, label: "Compare Texts" },
+      ],
+    },
   ];
-
-  const handleSaveNote = async () => {
-    if (!noteTitle.trim() || !noteContent.trim()) return;
-
-    setSaving(true);
-    try {
-      await createNote({
-        title: noteTitle,
-        content: noteContent.trim(), // ensures transcription is included
-        category: selectedCategory === "all" ? "daily-learnings" : selectedCategory,
-        tags: [],
-      });
-      
-      setNoteTitle("");
-      setNoteContent("");
-      toast({ title: "Note saved", description: "Your note has been created successfully." });
-    } catch (err) {
-      console.error("Failed to save note:", err);
-      toast({ title: "Error", description: "Failed to save note. Please try again.", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleNoteClick = (note: NoteDTO) => {
-    setSelectedNote(note);
-    setModalOpen(true);
-  };
-
-  const handleUpdateNote = async (id: string, payload: Partial<{ title: string; content: string }>) => {
-    const updated = await updateNote(id, payload);
-    setSelectedNote(prev => prev ? { ...prev, ...updated, id: updated._id || updated.id } : null);
-    toast({ title: "Note updated", description: "Your changes have been saved." });
-    return updated;
-  };
-
-  const handleDeleteNote = async (id: string) => {
-    await removeNote(id);
-    toast({ title: "Note deleted", description: "The note has been removed." });
-  };
-
-  // Determine which notes to display
-  const displayNotes = searchResults !== null ? searchResults : notes;
-  const filteredNotes =
-    selectedCategory === "all"
-      ? displayNotes
-      : displayNotes.filter((note) => note.category === selectedCategory);
 
   return (
     <DashboardLayout>
       <div className="page-container animate-fade-in">
-        {/* PAGE HEADER */}
-        <div className="page-header">
-          <div className="min-w-0 flex-1">
+        {/* Header */}
+        <div className="page-header text-center mb-12">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <BookOpen className="w-10 h-10 text-primary" />
             <h1 className="page-title">NeuraNotes</h1>
-            <p className="page-subtitle">
-              Your AI-powered personal journal and knowledge workspace
-            </p>
           </div>
-
-          <Badge
-            variant="secondary"
-            className="bg-primary/10 text-primary border-primary/20"
-          >
-            <Calendar className="w-4 h-4 mr-1.5" />
-            {notes.length} Notes
+          <p className="page-subtitle max-w-2xl mx-auto">
+            Your AI-powered writing workspace. Choose a specialized space for your notes.
+          </p>
+          <Badge variant="secondary" className="mt-4 bg-primary/10 text-primary border-primary/20">
+            {notes.length} Total Notes
           </Badge>
         </div>
 
-        <div className="workspace-grid">
-          {/* LEFT CONTENT */}
-          <div className="workspace-content-column">
-            {/* Search Bar */}
-            <NotesSearchBar
-              onSearch={searchNotes}
-              onClear={clearSearch}
-              searching={searching}
-              hasResults={searchResults !== null}
-            />
-
-            {/* Search Results Indicator */}
-            {searchResults !== null && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Showing {searchResults.length} search result{searchResults.length !== 1 ? "s" : ""}</span>
-              </div>
-            )}
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="card-hover card-glass">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Total Notes</CardTitle>
+        {/* Note Spaces Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          {noteSpaces.map((space) => (
+            <Link key={space.path} to={space.path} className="block group">
+              <Card className={`h-full card-hover border-2 ${space.borderColor} bg-gradient-to-br ${space.color} transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-xl`}>
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className={`p-3 rounded-xl bg-background/80 ${space.iconColor}`}>
+                      <space.icon className="w-8 h-8" />
+                    </div>
+                    <Badge variant="secondary" className="bg-background/80">
+                      {space.count} notes
+                    </Badge>
+                  </div>
+                  <CardTitle className="text-xl mt-4">{space.title}</CardTitle>
+                  <CardDescription className="text-sm">{space.description}</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{notes.length}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Across all categories
-                  </p>
-                </CardContent>
-              </Card>
 
-              <Card className="card-hover card-glass">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">
-                    Writing Streak
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">7 days</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Keep it up!
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="card-hover card-glass">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">This Week</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">12</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    New entries
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Editor */}
-            <Card className="card-glass">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Plus className="w-5 h-5" />
-                  Create New Note
-                </CardTitle>
-                <CardDescription>
-                  Write your thoughts, learnings, or reflections
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="Note title..."
-                    value={noteTitle}
-                    onChange={(e) => setNoteTitle(e.target.value)}
-                    className="text-lg font-semibold flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant={isRecording ? "destructive" : "outline"}
-                    size="icon"
-                    onClick={toggleRecording}
-                    disabled={!isSupported || isProcessing}
-                    title={!isSupported ? "Microphone not supported" : isRecording ? "Stop recording" : "Start voice dictation"}
-                  >
-                    {isRecording ? (
-                      <MicOff className="h-4 w-4" />
-                    ) : (
-                      <Mic className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-
-                <RecordingIndicator isRecording={isRecording} isProcessing={isProcessing} />
-
-                <Textarea
-                  ref={textareaRef}
-                  placeholder="Start writing... (Supports markdown)"
-                  value={noteContent}
-                  onChange={(e) => setNoteContent(e.target.value)}
-                  className="min-h-[200px] resize-none"
-                />
-
-                {/* AI Action Buttons */}
-                <NoteAIActions
-                  onImprove={handleImproveGrammar}
-                  onParaphrase={handleParaphrase}
-                  onReadAloud={handleReadAloud}
-                  onStopAudio={stopAudio}
-                  improving={improving}
-                  paraphrasing={paraphrasing}
-                  ttsLoading={ttsLoading}
-                  playing={playing}
-                  disabled={!noteContent.trim() || isRecording || isProcessing}
-                />
-
-                {/* Advanced AI Tools Menu */}
-                <AIToolsMenu
-                  noteContent={noteContent}
-                  onContentChange={setNoteContent}
-                  onRewrite={handleRewrite}
-                  onExpand={handleExpand}
-                  onBuildScene={advancedAI.buildScene}
-                  onBuildCharacter={advancedAI.buildCharacter}
-                  onEnhanceDialogue={handleEnhanceDialogue}
-                  onGenerateIdeas={advancedAI.generateIdeas}
-                  onStructure={handleStructure}
-                  onExtractBullets={handleExtractBullets}
-                  onExtractActions={handleExtractActions}
-                  onImproveAcademic={handleImproveAcademic}
-                  onStrengthen={handleStrengthen}
-                  onCompare={handleCompare}
-                  loading={advancedAI.loading}
-                  disabled={isRecording || isProcessing}
-                />
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    onClick={handleSaveNote}
-                    disabled={!noteTitle.trim() || !noteContent.trim() || saving || isRecording || isProcessing || improving || paraphrasing}
-                    className="action-button"
-                  >
-                    {saving ? "Saving..." : "Save Note"}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setNoteTitle("");
-                      setNoteContent("");
-                    }}
-                    className="action-button"
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Error State */}
-            {error && (
-              <Card className="border-destructive/50 bg-destructive/5">
-                <CardContent className="flex items-center gap-3 py-4">
-                  <AlertCircle className="w-5 h-5 text-destructive" />
-                  <p className="text-sm text-destructive">{error}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Notes List */}
-            <Card className="card-glass">
-              <CardHeader>
-                <CardTitle>Your Notes</CardTitle>
-                <CardDescription>Organized and accessible</CardDescription>
-              </CardHeader>
-
-              <CardContent>
-                <Tabs
-                  value={selectedCategory}
-                  onValueChange={setSelectedCategory}
-                >
-                  <ScrollArea className="w-full">
-                    <TabsList className="inline-flex w-full min-w-max">
-                      {categories.map((cat) => (
-                        <TabsTrigger
-                          key={cat.id}
-                          value={cat.id}
-                          className="gap-2"
-                        >
-                          <cat.icon className="w-4 h-4" />
-                          <span className="hidden sm:inline">{cat.label}</span>
-                        </TabsTrigger>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Features</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {space.features.map((feature, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs gap-1 bg-background/60">
+                          <feature.icon className="w-3 h-3" />
+                          {feature.label}
+                        </Badge>
                       ))}
-                    </TabsList>
-                  </ScrollArea>
+                    </div>
+                  </div>
 
-                  <TabsContent value={selectedCategory} className="mt-4 space-y-3">
-                    {/* Diary Lock */}
-                    {selectedCategory === "diary" && diaryLocked ? (
-                      <div className="text-center py-12">
-                        <Lock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">
-                          Private Diary Locked
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Your personal thoughts are protected
-                        </p>
-                        <Button onClick={() => setDiaryLocked(false)} variant="outline">
-                          <Unlock className="w-4 h-4 mr-2" />
-                          Unlock Diary
-                        </Button>
-                      </div>
-                    ) : loading ? (
-                      <div className="space-y-3">
-                        <NoteCardSkeleton />
-                        <NoteCardSkeleton />
-                        <NoteCardSkeleton />
-                      </div>
-                    ) : filteredNotes.length === 0 ? (
-                      <div className="text-center py-12">
-                        <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">
-                          {searchResults !== null ? "No matching notes found" : "No notes yet"}
-                        </p>
-                      </div>
-                    ) : (
-                      filteredNotes.map((note) => {
-                        const created = note.createdAt
-                          ? new Date(note.createdAt)
-                          : new Date();
-
-                        return (
-                          <Card
-                            key={note.id}
-                            className="card-hover cursor-pointer transition-all hover:border-primary/30"
-                            onClick={() => handleNoteClick(note)}
-                          >
-                            <CardHeader className="pb-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <CardTitle className="text-base">
-                                  {note.title}
-                                </CardTitle>
-
-                                <Badge variant="outline" className="text-xs">
-                                  {categories.find((c) => c.id === note.category)
-                                    ?.label || "General"}
-                                </Badge>
-                              </div>
-
-                              <CardDescription className="text-xs">
-                                {created.toLocaleDateString()}{" "}
-                                {created.toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </CardDescription>
-                            </CardHeader>
-
-                            <CardContent>
-                              <p className="text-sm text-foreground/80 line-clamp-3">
-                                {note.content}
-                              </p>
-
-                              {note.summary && (
-                                <p className="text-xs text-foreground/60 mt-2 line-clamp-2">
-                                  <strong>Summary: </strong>
-                                  {note.summary}
-                                </p>
-                              )}
-
-                              {note.emotion?.label && (
-                                <Badge
-                                  variant="secondary"
-                                  className="mt-2 text-xs bg-primary/10 text-primary"
-                                >
-                                  {note.emotion.label} •{" "}
-                                  {(note.emotion.score * 100).toFixed(0)}%
-                                </Badge>
-                              )}
-
-                              {note.tags?.length > 0 && (
-                                <div className="flex gap-1 mt-3">
-                                  {note.tags.map((tag, idx) => (
-                                    <Badge
-                                      key={idx}
-                                      variant="secondary"
-                                      className="text-xs"
-                                    >
-                                      <Tag className="w-3 h-3 mr-1" />
-                                      {tag}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        );
-                      })
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* RIGHT — AI Chat Assistant */}
-          <div className="workspace-chat-column">
-            <div className="sticky top-20">
-              <Card className="card-glass h-[calc(100vh-6rem)]">
-                <AgentChat
-                  agentName="NeuraNotes AI"
-                  agentIcon={BookOpen}
-                  placeholder="Ask me to summarize, organize, or analyze your notes..."
-                  initialMessages={[
-                    {
-                      role: "agent",
-                      content:
-                        "Hello! I'm your NeuraNotes AI assistant. I can help you organize your notes, suggest topics, summarize past entries, and provide writing insights. How can I assist you today?",
-                      timestamp: new Date(),
-                    },
-                  ]}
-                />
+                  <Button className="w-full group-hover:bg-primary gap-2" variant="secondary">
+                    Open {space.title.split("'")[0]}
+                    <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                  </Button>
+                </CardContent>
               </Card>
-            </div>
-          </div>
+            </Link>
+          ))}
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 max-w-4xl mx-auto mt-12">
+          <Card className="card-glass text-center">
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-primary">{notes.length}</div>
+              <p className="text-sm text-muted-foreground">Total Notes</p>
+            </CardContent>
+          </Card>
+          <Card className="card-glass text-center">
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-violet-500">{writerNotes.length}</div>
+              <p className="text-sm text-muted-foreground">Creative Works</p>
+            </CardContent>
+          </Card>
+          <Card className="card-glass text-center">
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-blue-500">{generalNotes.length}</div>
+              <p className="text-sm text-muted-foreground">General Notes</p>
+            </CardContent>
+          </Card>
+          <Card className="card-glass text-center">
+            <CardContent className="pt-6">
+              <div className="text-3xl font-bold text-emerald-500">{academicNotes.length}</div>
+              <p className="text-sm text-muted-foreground">Academic Notes</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
-
-      {/* Note View/Edit Modal */}
-      <NoteViewModal
-        note={selectedNote}
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setSelectedNote(null);
-        }}
-        onUpdate={handleUpdateNote}
-        onDelete={handleDeleteNote}
-        categories={categories}
-      />
     </DashboardLayout>
   );
 };

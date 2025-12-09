@@ -14,6 +14,9 @@ import FinancePage from "./pages/FinancePage";
 import NutritionPage from "./pages/NutritionPage";
 import LifestylePage from "./pages/LifestylePage";
 import NeuraNotes from "./pages/NeuraNotes";
+import WriterNotes from "./pages/notes/WriterNotes";
+import GeneralNotes from "./pages/notes/GeneralNotes";
+import AcademicNotes from "./pages/notes/AcademicNotes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +39,9 @@ const App = () => (
             <Route path="/nutrition" element={<NutritionPage />} />
             <Route path="/lifestyle" element={<LifestylePage />} />
             <Route path="/neuranotes" element={<NeuraNotes />} />
+            <Route path="/notes/writer" element={<WriterNotes />} />
+            <Route path="/notes/general" element={<GeneralNotes />} />
+            <Route path="/notes/academic" element={<AcademicNotes />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
