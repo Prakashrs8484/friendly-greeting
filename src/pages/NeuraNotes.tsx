@@ -40,9 +40,12 @@ import {
 import { useDictation } from "@/hooks/useDictation";
 import { RecordingIndicator } from "@/components/notes/RecordingIndicator";
 import { NoteAIActions } from "@/components/notes/NoteAIActions";
+import { AIToolsMenu } from "@/components/notes/AIToolsMenu";
 
 import { useNotes, NoteDTO } from "@/hooks/useNotes";
 import { useNoteAI } from "@/hooks/useNoteAI";
+import { useAdvancedNoteAI } from "@/hooks/useAdvancedNoteAI";
+import { RewriteMode, DialogueStyle, IdeaMode } from "@/lib/noteAiApi";
 
 const NeuraNotes = () => {
   const [diaryLocked, setDiaryLocked] = useState(true);
@@ -102,6 +105,9 @@ const NeuraNotes = () => {
     stopAudio,
   } = useNoteAI();
 
+  // Advanced AI features hook
+  const advancedAI = useAdvancedNoteAI();
+
   const handleImproveGrammar = async () => {
     if (!noteContent.trim()) {
       toast({ title: "No content", description: "Write something first.", variant: "destructive" });
@@ -158,6 +164,141 @@ const NeuraNotes = () => {
       await readAloud(noteContent);
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to read aloud.", variant: "destructive" });
+    }
+  };
+
+  // Advanced AI Handlers
+  const handleRewrite = async (mode: RewriteMode) => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await advancedAI.rewriteNote(noteContent, mode);
+      setNoteContent(result);
+      toast({ title: "Rewritten!", description: `Text rewritten in ${mode} style.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleExpand = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await advancedAI.expandThought(noteContent);
+      setNoteContent(result);
+      toast({ title: "Expanded!", description: "Your thought has been expanded." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleEnhanceDialogue = async (style: DialogueStyle) => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await advancedAI.enhanceDialogue(noteContent, style);
+      setNoteContent(result);
+      toast({ title: "Enhanced!", description: `Dialogue enhanced with ${style} style.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleStructure = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await advancedAI.structureDocument(noteContent);
+      setNoteContent(result);
+      toast({ title: "Structured!", description: "Document has been organized." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleExtractBullets = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const bullets = await advancedAI.extractBullets(noteContent);
+      setNoteContent(bullets.map((b) => `• ${b}`).join("\n"));
+      toast({ title: "Extracted!", description: "Bullet points extracted." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleExtractActions = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const actions = await advancedAI.extractActions(noteContent);
+      const formatted = actions
+        .map((a) => `☐ ${a.action}${a.owner ? ` (@${a.owner})` : ""}${a.deadline ? ` [${a.deadline}]` : ""}`)
+        .join("\n");
+      setNoteContent(formatted);
+      toast({ title: "Extracted!", description: "Action items extracted." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleImproveAcademic = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await advancedAI.improveAcademic(noteContent);
+      setNoteContent(result);
+      toast({ title: "Improved!", description: "Academic writing enhanced." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleStrengthen = async () => {
+    if (!noteContent.trim()) {
+      toast({ title: "No content", description: "Write something first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await advancedAI.strengthenArgument(noteContent);
+      setNoteContent(result);
+      toast({ title: "Strengthened!", description: "Argument has been strengthened." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCompare = async (textA: string, textB: string) => {
+    try {
+      const result = await advancedAI.compareTexts(textA, textB);
+      const formatted = [
+        "## Comparison Results\n",
+        "### Differences",
+        ...result.differences.map((d) => `- ${d}`),
+        "\n### Similarities",
+        ...result.similarities.map((s) => `- ${s}`),
+        "\n### Suggested Improvements",
+        ...result.improvements.map((i) => `- ${i}`),
+      ].join("\n");
+      setNoteContent(formatted);
+      toast({ title: "Compared!", description: "Comparison complete." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   };
 
@@ -358,6 +499,26 @@ const NeuraNotes = () => {
                   ttsLoading={ttsLoading}
                   playing={playing}
                   disabled={!noteContent.trim() || isRecording || isProcessing}
+                />
+
+                {/* Advanced AI Tools Menu */}
+                <AIToolsMenu
+                  noteContent={noteContent}
+                  onContentChange={setNoteContent}
+                  onRewrite={handleRewrite}
+                  onExpand={handleExpand}
+                  onBuildScene={advancedAI.buildScene}
+                  onBuildCharacter={advancedAI.buildCharacter}
+                  onEnhanceDialogue={handleEnhanceDialogue}
+                  onGenerateIdeas={advancedAI.generateIdeas}
+                  onStructure={handleStructure}
+                  onExtractBullets={handleExtractBullets}
+                  onExtractActions={handleExtractActions}
+                  onImproveAcademic={handleImproveAcademic}
+                  onStrengthen={handleStrengthen}
+                  onCompare={handleCompare}
+                  loading={advancedAI.loading}
+                  disabled={isRecording || isProcessing}
                 />
 
                 <div className="flex items-center gap-2 flex-wrap">
