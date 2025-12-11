@@ -1,12 +1,13 @@
 // src/pages/notes/GeneralNotes.tsx
 import { useState, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import AgentChat from "@/components/AgentChat";
 import { NoteViewModal } from "@/components/notes/NoteViewModal";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { NoteCardSkeleton } from "@/components/notes/NoteCardSkeleton";
 import { NoteAIActions } from "@/components/notes/NoteAIActions";
-
+import { FloatingAssistantButton } from "@/components/notes/FloatingAssistantButton";
+import { AgentChatDrawer } from "@/components/notes/AgentChatDrawer";
+import { useLiveDraftSync } from "@/hooks/useLiveDraftSync";
 import {
   Card,
   CardContent,
@@ -45,6 +46,7 @@ import { useNoteAI } from "@/hooks/useNoteAI";
 
 const GeneralNotes = () => {
   const [diaryLocked, setDiaryLocked] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const {
     notes,
     loading,
@@ -63,6 +65,9 @@ const GeneralNotes = () => {
   const [noteContent, setNoteContent] = useState("");
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Live draft sync to agent memory
+  useLiveDraftSync(noteContent, { enabled: noteContent.length > 10 });
 
   const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
     onTranscription: (text) => {
@@ -399,25 +404,6 @@ const GeneralNotes = () => {
             </Card>
           </div>
 
-          {/* AI Chat */}
-          <div className="workspace-chat-column">
-            <div className="sticky top-20">
-              <Card className="card-glass h-[calc(100vh-6rem)]">
-                <AgentChat
-                  agentName="Notes AI"
-                  agentIcon={BookOpen}
-                  placeholder="Ask me to summarize or organize your notes..."
-                  initialMessages={[
-                    {
-                      role: "agent",
-                      content: "Hello! I can help you organize notes, summarize entries, and provide writing tips. How can I assist?",
-                      timestamp: new Date(),
-                    },
-                  ]}
-                />
-              </Card>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -429,6 +415,10 @@ const GeneralNotes = () => {
         onDelete={handleDeleteNote}
         categories={categories}
       />
+
+      {/* Floating AI Assistant */}
+      <FloatingAssistantButton onClick={() => setChatOpen(true)} />
+      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
     </DashboardLayout>
   );
 };
