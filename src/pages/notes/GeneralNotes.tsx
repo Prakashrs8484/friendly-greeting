@@ -8,6 +8,7 @@ import { NoteAIActions } from "@/components/notes/NoteAIActions";
 import { FloatingAssistantButton } from "@/components/notes/FloatingAssistantButton";
 import { AgentChatDrawer } from "@/components/notes/AgentChatDrawer";
 import { useLiveDraftSync } from "@/hooks/useLiveDraftSync";
+import { useAdvancedNoteAI } from "@/hooks/useAdvancedNoteAI";
 import {
   Card,
   CardContent,
@@ -93,6 +94,8 @@ const GeneralNotes = () => {
     stopAudio,
   } = useNoteAI();
 
+  const advancedAI = useAdvancedNoteAI();
+
   const handleImproveGrammar = async () => {
     if (!noteContent.trim()) {
       toast({ title: "No content", description: "Write something first.", variant: "destructive" });
@@ -146,23 +149,45 @@ const GeneralNotes = () => {
   ];
 
   const handleSaveNote = async () => {
-    if (!noteTitle.trim() || !noteContent.trim()) return;
+    if (!noteContent.trim()) return;
     setSaving(true);
     try {
+      // Auto-generate title if empty
+      let finalTitle = noteTitle.trim();
+      if (!finalTitle) {
+        try {
+          finalTitle = await advancedAI.generateTitle(noteContent);
+        } catch {
+          finalTitle = `Note ${new Date().toLocaleDateString()}`;
+        }
+      }
+
+      // Auto-generate tags
+      let finalTags: string[] = [];
+      try {
+        finalTags = await advancedAI.generateTags(noteContent);
+      } catch {
+        finalTags = [];
+      }
+
       await createNote({
-        title: noteTitle,
+        title: finalTitle,
         content: noteContent.trim(),
         category: selectedCategory === "all" ? "general" : selectedCategory,
-        tags: [],
+        tags: finalTags,
       });
       setNoteTitle("");
       setNoteContent("");
-      toast({ title: "Note saved" });
+      toast({ title: "Note saved", description: finalTags.length ? `Tags: ${finalTags.join(", ")}` : undefined });
     } catch (err) {
       toast({ title: "Error", description: "Failed to save note.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleInsertFromChat = (text: string) => {
+    setNoteContent((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
   };
 
   const handleNoteClick = (note: NoteDTO) => {
@@ -418,7 +443,7 @@ const GeneralNotes = () => {
 
       {/* Floating AI Assistant */}
       <FloatingAssistantButton onClick={() => setChatOpen(true)} />
-      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
+      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} onInsertToNote={handleInsertFromChat} />
     </DashboardLayout>
   );
 };

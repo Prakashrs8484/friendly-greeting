@@ -184,23 +184,46 @@ const WriterNotes = () => {
   };
 
   const handleSaveNote = async () => {
-    if (!noteTitle.trim() || !noteContent.trim()) return;
+    if (!noteContent.trim()) return;
     setSaving(true);
     try {
+      // Auto-generate title if empty
+      let finalTitle = noteTitle.trim();
+      if (!finalTitle) {
+        try {
+          finalTitle = await advancedAI.generateTitle(noteContent);
+        } catch {
+          finalTitle = `Creative Work ${new Date().toLocaleDateString()}`;
+        }
+      }
+
+      // Auto-generate tags
+      let finalTags: string[] = ["writer"];
+      try {
+        const generatedTags = await advancedAI.generateTags(noteContent);
+        finalTags = [...new Set([...finalTags, ...generatedTags])];
+      } catch {
+        // Keep default tag
+      }
+
       await createNote({
-        title: noteTitle,
+        title: finalTitle,
         content: noteContent.trim(),
         category: "creative",
-        tags: ["writer"],
+        tags: finalTags,
       });
       setNoteTitle("");
       setNoteContent("");
-      toast({ title: "Note saved", description: "Your creative work has been saved." });
+      toast({ title: "Note saved", description: finalTags.length > 1 ? `Tags: ${finalTags.join(", ")}` : undefined });
     } catch (err) {
       toast({ title: "Error", description: "Failed to save note.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleInsertFromChat = (text: string) => {
+    setNoteContent((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
   };
 
   const handleNoteClick = (note: NoteDTO) => {
@@ -459,7 +482,7 @@ const WriterNotes = () => {
 
       {/* Floating AI Assistant */}
       <FloatingAssistantButton onClick={() => setChatOpen(true)} />
-      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
+      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} onInsertToNote={handleInsertFromChat} />
     </DashboardLayout>
   );
 };
