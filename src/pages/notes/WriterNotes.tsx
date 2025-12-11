@@ -1,11 +1,12 @@
 // src/pages/notes/WriterNotes.tsx
 import { useState, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import AgentChat from "@/components/AgentChat";
 import { NoteViewModal } from "@/components/notes/NoteViewModal";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { NoteCardSkeleton } from "@/components/notes/NoteCardSkeleton";
-
+import { FloatingAssistantButton } from "@/components/notes/FloatingAssistantButton";
+import { AgentChatDrawer } from "@/components/notes/AgentChatDrawer";
+import { useLiveDraftSync } from "@/hooks/useLiveDraftSync";
 import {
   Card,
   CardContent,
@@ -85,6 +86,7 @@ const DIALOGUE_STYLES: { value: DialogueStyle; label: string }[] = [
 ];
 
 const WriterNotes = () => {
+  const [chatOpen, setChatOpen] = useState(false);
   const {
     notes,
     loading,
@@ -102,6 +104,9 @@ const WriterNotes = () => {
   const [noteContent, setNoteContent] = useState("");
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Live draft sync to agent memory
+  useLiveDraftSync(noteContent, { enabled: noteContent.length > 10 });
 
   const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
     onTranscription: (text) => {
@@ -415,25 +420,6 @@ const WriterNotes = () => {
             </Card>
           </div>
 
-          {/* AI Chat */}
-          <div className="workspace-chat-column">
-            <div className="sticky top-20">
-              <Card className="card-glass h-[calc(100vh-6rem)]">
-                <AgentChat
-                  agentName="Creative AI"
-                  agentIcon={PenTool}
-                  placeholder="Ask me for story ideas, character development tips..."
-                  initialMessages={[
-                    {
-                      role: "agent",
-                      content: "Hello! I'm your Creative Writing AI. I can help with story ideas, character development, dialogue, world-building, and more!",
-                      timestamp: new Date(),
-                    },
-                  ]}
-                />
-              </Card>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -470,6 +456,10 @@ const WriterNotes = () => {
         onDelete={handleDeleteNote}
         categories={categories}
       />
+
+      {/* Floating AI Assistant */}
+      <FloatingAssistantButton onClick={() => setChatOpen(true)} />
+      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
     </DashboardLayout>
   );
 };

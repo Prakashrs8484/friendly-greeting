@@ -1,11 +1,12 @@
 // src/pages/notes/AcademicNotes.tsx
 import { useState, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import AgentChat from "@/components/AgentChat";
 import { NoteViewModal } from "@/components/notes/NoteViewModal";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { NoteCardSkeleton } from "@/components/notes/NoteCardSkeleton";
-
+import { FloatingAssistantButton } from "@/components/notes/FloatingAssistantButton";
+import { AgentChatDrawer } from "@/components/notes/AgentChatDrawer";
+import { useLiveDraftSync } from "@/hooks/useLiveDraftSync";
 import {
   Card,
   CardContent,
@@ -49,6 +50,7 @@ import { useAdvancedNoteAI } from "@/hooks/useAdvancedNoteAI";
 import { CompareTextsModal } from "@/components/notes/modals/CompareTextsModal";
 
 const AcademicNotes = () => {
+  const [chatOpen, setChatOpen] = useState(false);
   const {
     notes,
     loading,
@@ -67,6 +69,9 @@ const AcademicNotes = () => {
   const [noteContent, setNoteContent] = useState("");
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Live draft sync to agent memory
+  useLiveDraftSync(noteContent, { enabled: noteContent.length > 10 });
 
   const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
     onTranscription: (text) => {
@@ -429,25 +434,6 @@ const AcademicNotes = () => {
             </Card>
           </div>
 
-          {/* AI Chat */}
-          <div className="workspace-chat-column">
-            <div className="sticky top-20">
-              <Card className="card-glass h-[calc(100vh-6rem)]">
-                <AgentChat
-                  agentName="Academic AI"
-                  agentIcon={GraduationCap}
-                  placeholder="Ask me about research, study tips, or interview prep..."
-                  initialMessages={[
-                    {
-                      role: "agent",
-                      content: "Hello! I'm your Academic AI assistant. I can help with research summaries, study strategies, essay improvements, and interview preparation. How can I assist?",
-                      timestamp: new Date(),
-                    },
-                  ]}
-                />
-              </Card>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -467,6 +453,10 @@ const AcademicNotes = () => {
         onDelete={handleDeleteNote}
         categories={categories}
       />
+
+      {/* Floating AI Assistant */}
+      <FloatingAssistantButton onClick={() => setChatOpen(true)} />
+      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
     </DashboardLayout>
   );
 };

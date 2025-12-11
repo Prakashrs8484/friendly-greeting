@@ -227,6 +227,20 @@ All colors MUST be HSL.
   .badge-error {
     @apply bg-destructive/10 text-destructive border-destructive/20;
   }
+  
+  /* Floating animation for AI assistant button */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .animate-float:hover {
+    animation-play-state: paused;
+  }
 }
 
 @layer base {
