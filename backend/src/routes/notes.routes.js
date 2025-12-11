@@ -36,8 +36,8 @@ router.post("/expand", auth, expandIdeaController);
 router.post("/rewrite", auth, rewriteNoteController);
 router.post("/create", auth, controller.createNote);
 router.get("/all", auth, controller.getAllNotes);
-router.post("/update/:id", auth, controller.updateNote);
-router.delete("/delete/:id", auth, controller.deleteNote);
+router.put("/:id", auth, controller.updateNote);
+router.delete("/:id", auth, controller.deleteNoteController);
 router.get("/:id", auth, controller.getNoteById);
 
 module.exports = router;

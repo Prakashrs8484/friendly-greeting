@@ -15,7 +15,7 @@ const notesRoutes = require("./routes/notes.routes");
 const sttRoutes = require("./routes/stt.routes");
 const noteAiRoutes = require("./routes/noteAi.routes");
 const ttsRoutes = require("./routes/tts.routes");
-
+const agentRoutes = require("./routes/agent.routes");
 
 
 
@@ -33,11 +33,13 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/context', contextRoutes);
 app.use("/api/planning", planningRoutes);
 app.use('/api/ai/action', aiActionRoutes);
+app.use("/api/agent", agentRoutes);
 
 app.use("/api/notes", notesRoutes);        
 app.use("/api/notes", noteAiRoutes);
 app.use("/api/notes", sttRoutes);
 app.use("/api/notes", ttsRoutes);
+
 
 
 app.get('/', (req, res) => res.json({ status: 'NeuraDesk backend (Option 1) running' }));
