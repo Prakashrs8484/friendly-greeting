@@ -1,11 +1,13 @@
 // src/components/notes/AgentChatDrawer.tsx
 import { useState, useRef, useEffect } from "react";
-import { X, Send, Bot, Sparkles, Loader2, ChevronDown } from "lucide-react";
+import { X, Send, Bot, Loader2, Mic, MicOff, Copy, ArrowDownToLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { agentQueryApi } from "@/lib/agentApi";
+import { useDictation } from "@/hooks/useDictation";
+import { toast } from "@/hooks/use-toast";
 
 interface Message {
   id: string;
@@ -17,9 +19,10 @@ interface Message {
 interface AgentChatDrawerProps {
   open: boolean;
   onClose: () => void;
+  onInsertToNote?: (text: string) => void;
 }
 
-export function AgentChatDrawer({ open, onClose }: AgentChatDrawerProps) {
+export function AgentChatDrawer({ open, onClose, onInsertToNote }: AgentChatDrawerProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -32,6 +35,17 @@ export function AgentChatDrawer({ open, onClose }: AgentChatDrawerProps) {
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Voice input
+  const { isRecording, isProcessing, isSupported, toggleRecording } = useDictation({
+    onTranscription: (text) => {
+      setInput((prev) => (prev ? `${prev} ${text}` : text));
+      toast({ title: "Voice input added" });
+    },
+    onError: (error) => {
+      toast({ title: "Voice Error", description: error, variant: "destructive" });
+    },
+  });
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -90,6 +104,18 @@ export function AgentChatDrawer({ open, onClose }: AgentChatDrawerProps) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard" });
+  };
+
+  const handleInsert = (text: string) => {
+    if (onInsertToNote) {
+      onInsertToNote(text);
+      toast({ title: "Inserted into note" });
     }
   };
 
@@ -156,21 +182,49 @@ export function AgentChatDrawer({ open, onClose }: AgentChatDrawerProps) {
                     <div className="w-4 h-4 rounded-full bg-primary" />
                   )}
                 </div>
-                <div
-                  className={cn(
-                    "max-w-[80%] px-4 py-3 rounded-2xl",
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-secondary/50 text-foreground rounded-bl-md"
+                <div className="max-w-[80%] space-y-1">
+                  <div
+                    className={cn(
+                      "px-4 py-3 rounded-2xl",
+                      message.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-md"
+                        : "bg-secondary/50 text-foreground rounded-bl-md"
+                    )}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <span className="text-[10px] opacity-60 mt-1 block">
+                      {message.timestamp.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  
+                  {/* Action buttons for agent messages */}
+                  {message.role === "agent" && message.id !== "welcome" && (
+                    <div className="flex gap-1 pl-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => handleCopy(message.content)}
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        Copy
+                      </Button>
+                      {onInsertToNote && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-primary"
+                          onClick={() => handleInsert(message.content)}
+                        >
+                          <ArrowDownToLine className="w-3 h-3 mr-1" />
+                          Insert
+                        </Button>
+                      )}
+                    </div>
                   )}
-                >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  <span className="text-[10px] opacity-60 mt-1 block">
-                    {message.timestamp.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
                 </div>
               </div>
             ))}
@@ -196,14 +250,29 @@ export function AgentChatDrawer({ open, onClose }: AgentChatDrawerProps) {
         {/* Input */}
         <div className="p-4 border-t border-border bg-background/50">
           <div className="flex gap-2">
+            <Button
+              variant={isRecording ? "destructive" : "outline"}
+              size="icon"
+              onClick={toggleRecording}
+              disabled={!isSupported || isProcessing || isTyping}
+              className="shrink-0"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isRecording ? (
+                <MicOff className="w-4 h-4" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
+            </Button>
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me anything about your notes..."
+              placeholder={isRecording ? "Listening..." : "Ask anything..."}
               className="flex-1 bg-background"
-              disabled={isTyping}
+              disabled={isTyping || isRecording}
             />
             <Button
               onClick={handleSend}
@@ -218,9 +287,16 @@ export function AgentChatDrawer({ open, onClose }: AgentChatDrawerProps) {
               )}
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            AI remembers your writing style and notes context
-          </p>
+          {isRecording && (
+            <p className="text-xs text-destructive mt-2 text-center animate-pulse">
+              🔴 Recording... Tap mic to stop
+            </p>
+          )}
+          {!isRecording && (
+            <p className="text-[10px] text-muted-foreground mt-2 text-center">
+              AI remembers your writing style • Use mic for voice input
+            </p>
+          )}
         </div>
       </div>
     </>
