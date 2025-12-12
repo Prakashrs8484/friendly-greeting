@@ -54,21 +54,32 @@ exports.getMemoriesController = async (req, res) => {
       filters["metadata.userId"] = userId;
     }
     
-    console.log("Filters applied:", filters);
+    console.log("Filters applied:", JSON.stringify(filters, null, 2));
     
     const memories = await memoryService.getRecentMemories(limit, filters);
     
-    console.log("Memories found:", memories.length);
+    if (memories && memories.length > 0) {
+      console.log("✅ SUCCESS: Memories retrieved successfully");
+      console.log("Memories found:", memories.length);
+      console.log("Sample memory IDs:", memories.slice(0, 3).map(m => m._id));
+    } else {
+      console.log("⚠️ WARNING: No memories found");
+      console.log("Filters used:", filters);
+      console.log("This might be expected if no memories exist for this user/type");
+    }
+    
     console.log("======================================");
     
     return res.status(200).json({ memories, count: memories.length });
   } catch (err) {
     console.error("========== GET MEMORIES ERROR ==========");
+    console.error("❌ FAILURE: Failed to fetch memories");
     console.error("Error Message:", err.message);
     console.error("Error Name:", err.name);
     console.error("Error Stack:", err.stack);
     console.error("Request query:", req.query);
     console.error("User ID:", req.user?._id);
+    console.error("Full Error Object:", JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
     console.error("======================================");
     return res.status(500).json({ error: "Failed to fetch memories", details: err.message });
   }
