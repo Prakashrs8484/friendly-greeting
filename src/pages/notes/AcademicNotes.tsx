@@ -238,10 +238,6 @@ const AcademicNotes = () => {
     setNoteContent((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
   };
 
-  const handleReplaceFromChat = (text: string) => {
-    setNoteContent(text);
-  };
-
   const handleNoteClick = (note: NoteDTO) => {
     setSelectedNote(note);
     setModalOpen(true);
@@ -483,7 +479,7 @@ const AcademicNotes = () => {
 
       {/* Floating AI Assistant */}
       <FloatingAssistantButton onClick={() => setChatOpen(true)} />
-      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} onInsertToNote={handleInsertFromChat} onReplaceNote={handleReplaceFromChat} />
+      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} onInsertToNote={handleInsertFromChat} />
     </DashboardLayout>
   );
 };
