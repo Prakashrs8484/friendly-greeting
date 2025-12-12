@@ -1,6 +1,6 @@
 // src/components/notes/AgentChatDrawer.tsx
 import { useState, useRef, useEffect } from "react";
-import { X, Send, Bot, Loader2, Mic, MicOff, Copy, ArrowDownToLine, Replace } from "lucide-react";
+import { X, Send, Bot, Loader2, Mic, MicOff, Copy, ArrowDownToLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,10 +20,9 @@ interface AgentChatDrawerProps {
   open: boolean;
   onClose: () => void;
   onInsertToNote?: (text: string) => void;
-  onReplaceNote?: (text: string) => void;
 }
 
-export function AgentChatDrawer({ open, onClose, onInsertToNote, onReplaceNote }: AgentChatDrawerProps) {
+export function AgentChatDrawer({ open, onClose, onInsertToNote }: AgentChatDrawerProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -120,15 +119,16 @@ export function AgentChatDrawer({ open, onClose, onInsertToNote, onReplaceNote }
     }
   };
 
-  const handleReplace = (text: string) => {
-    if (onReplaceNote) {
-      onReplaceNote(text);
-      toast({ title: "Note content replaced" });
-    }
-  };
-
   return (
     <>
+      {/* Backdrop */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-background/60 backdrop-blur-sm z-40 transition-opacity duration-300",
+          open ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={onClose}
+      />
 
       {/* Drawer */}
       <div
@@ -202,7 +202,7 @@ export function AgentChatDrawer({ open, onClose, onInsertToNote, onReplaceNote }
                   
                   {/* Action buttons for agent messages */}
                   {message.role === "agent" && message.id !== "welcome" && (
-                    <div className="flex gap-1 pl-1 flex-wrap">
+                    <div className="flex gap-1 pl-1">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -221,17 +221,6 @@ export function AgentChatDrawer({ open, onClose, onInsertToNote, onReplaceNote }
                         >
                           <ArrowDownToLine className="w-3 h-3 mr-1" />
                           Insert
-                        </Button>
-                      )}
-                      {onReplaceNote && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                          onClick={() => handleReplace(message.content)}
-                        >
-                          <Replace className="w-3 h-3 mr-1" />
-                          Replace
                         </Button>
                       )}
                     </div>
