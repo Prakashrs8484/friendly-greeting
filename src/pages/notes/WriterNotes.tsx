@@ -226,6 +226,10 @@ const WriterNotes = () => {
     setNoteContent((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text));
   };
 
+  const handleReplaceNote = (text: string) => {
+    setNoteContent(text);
+  };
+
   const handleNoteClick = (note: NoteDTO) => {
     setSelectedNote(note);
     setModalOpen(true);
@@ -482,7 +486,12 @@ const WriterNotes = () => {
 
       {/* Floating AI Assistant */}
       <FloatingAssistantButton onClick={() => setChatOpen(true)} />
-      <AgentChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} onInsertToNote={handleInsertFromChat} />
+      <AgentChatDrawer 
+        open={chatOpen} 
+        onClose={() => setChatOpen(false)} 
+        onInsertToNote={handleInsertFromChat}
+        onReplaceNote={handleReplaceNote}
+      />
     </DashboardLayout>
   );
 };
