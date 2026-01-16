@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, GitCompare } from "lucide-react";
-import { CompareResult } from "@/lib/noteAiApi";
+import ReactMarkdown from "react-markdown";
+import { compareTextsApi } from "@/lib/noteAiApi";
 
 interface CompareTextsModalProps {
   open: boolean;
@@ -31,22 +32,30 @@ export function CompareTextsModal({
 }: CompareTextsModalProps) {
   const [textA, setTextA] = useState("");
   const [textB, setTextB] = useState("");
-  const [result, setResult] = useState<CompareResult | null>(null);
+  const [comparison, setComparison] = useState<string>("");
+  const [isComparing, setIsComparing] = useState(false);
 
   const handleCompare = async () => {
     if (!textA.trim() || !textB.trim()) return;
+    setIsComparing(true);
+    setComparison("");
     try {
-      // The parent handles the compare and may store results
+      const result = await compareTextsApi(textA, textB);
+      // Ensure result is a string
+      setComparison(typeof result === "string" ? result : String(result || ""));
+      // Also call parent's onCompare to insert into note if needed
       await onCompare(textA, textB);
     } catch (error) {
       console.error("Comparison failed:", error);
+    } finally {
+      setIsComparing(false);
     }
   };
 
   const handleClose = () => {
     setTextA("");
     setTextB("");
-    setResult(null);
+    setComparison("");
     onClose();
   };
 
@@ -109,10 +118,10 @@ export function CompareTextsModal({
 
             <Button
               onClick={handleCompare}
-              disabled={!textA.trim() || !textB.trim() || loading}
+              disabled={!textA.trim() || !textB.trim() || isComparing || loading}
               className="w-full"
             >
-              {loading ? (
+              {isComparing || loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Comparing...
@@ -122,38 +131,13 @@ export function CompareTextsModal({
               )}
             </Button>
 
-            {result && (
+            {comparison && typeof comparison === "string" && (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-destructive">Differences</Label>
-                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                    <ul className="text-sm space-y-1">
-                      {result.differences.map((diff, idx) => (
-                        <li key={idx}>• {diff}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-primary">Similarities</Label>
-                  <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-                    <ul className="text-sm space-y-1">
-                      {result.similarities.map((sim, idx) => (
-                        <li key={idx}>• {sim}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-green-600">Suggested Improvements</Label>
-                  <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3">
-                    <ul className="text-sm space-y-1">
-                      {result.improvements.map((imp, idx) => (
-                        <li key={idx}>• {imp}</li>
-                      ))}
-                    </ul>
+                <div className="rounded-md border border-border bg-muted/50 p-4">
+                  <div className="prose prose-invert max-w-none">
+                    <ReactMarkdown>
+                      {comparison}
+                    </ReactMarkdown>
                   </div>
                 </div>
               </div>

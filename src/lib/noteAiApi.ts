@@ -53,7 +53,7 @@ export async function dialogueEnhancerApi(text: string, style: DialogueStyle): P
 
 export type IdeaMode = "story" | "poem" | "article" | "youtube" | "motivational" | "romantic";
 
-export async function ideaGeneratorApi(mode: IdeaMode, topic?: string): Promise<{ ideas: string[] }> {
+export async function ideaGeneratorApi(mode: IdeaMode, topic?: string): Promise<{ ideas: string | string[] }> {
   return request("/api/notes/idea", { method: "POST", body: JSON.stringify({ mode, topic }) });
 }
 
@@ -84,14 +84,9 @@ export async function argumentStrengthenerApi(text: string): Promise<{ strengthe
   return request("/api/notes/strengthen", { method: "POST", body: JSON.stringify({ text }) });
 }
 
-export interface CompareResult {
-  differences: string[];
-  similarities: string[];
-  improvements: string[];
-}
-
-export async function compareTextsApi(textA: string, textB: string): Promise<CompareResult> {
-  return request("/api/notes/compare", { method: "POST", body: JSON.stringify({ textA, textB }) });
+export async function compareTextsApi(textA: string, textB: string): Promise<string> {
+  const result = await request<{ comparison?: string }>("/api/notes/compare", { method: "POST", body: JSON.stringify({ textA, textB }) });
+  return result.comparison || "";
 }
 
 export async function autoTitleApi(text: string): Promise<{ title: string }> {

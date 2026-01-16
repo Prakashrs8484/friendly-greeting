@@ -124,7 +124,7 @@ const AcademicNotes = () => {
     }
     try {
       const bullets = await advancedAI.extractBullets(noteContent);
-      setNoteContent(bullets.map((b) => `• ${b}`).join("\n"));
+      setNoteContent(Array.isArray(bullets) ? bullets.map((b) => `• ${b}`).join("\n") : bullets || "");
       toast({ title: "Bullets extracted!" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -138,9 +138,17 @@ const AcademicNotes = () => {
     }
     try {
       const actions = await advancedAI.extractActions(noteContent);
-      const formatted = actions
-        .map((a) => `☐ ${a.action}${a.owner ? ` (@${a.owner})` : ""}${a.deadline ? ` [${a.deadline}]` : ""}`)
-        .join("\n");
+      const formatted = Array.isArray(actions)
+        ? actions
+            .map((action) => {
+              // Handle both string and object formats
+              const text = typeof action === "string" ? action : action.task || action.text || action.action || "Untitled";
+              const due = action.due || action.deadline || "";
+              const dueText = due ? ` [${due}]` : "";
+              return `☐ ${text}${dueText}`;
+            })
+            .join("\n")
+        : actions || "";
       setNoteContent(formatted);
       toast({ title: "Action items extracted!" });
     } catch (err: any) {
@@ -179,16 +187,7 @@ const AcademicNotes = () => {
   const handleCompare = async (textA: string, textB: string) => {
     try {
       const result = await advancedAI.compareTexts(textA, textB);
-      const formatted = [
-        "## Comparison Results\n",
-        "### Differences",
-        ...result.differences.map((d) => `- ${d}`),
-        "\n### Similarities",
-        ...result.similarities.map((s) => `- ${s}`),
-        "\n### Suggested Improvements",
-        ...result.improvements.map((i) => `- ${i}`),
-      ].join("\n");
-      setNoteContent(formatted);
+      setNoteContent(result);
       toast({ title: "Comparison complete!" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -438,7 +437,7 @@ const AcademicNotes = () => {
                                 </CardHeader>
                                 <CardContent>
                                   <p className="text-sm text-foreground/80 line-clamp-3">{note.content}</p>
-                                  {note.tags?.length > 0 && (
+                                  {note.tags && Array.isArray(note.tags) && note.tags.length > 0 && (
                                     <div className="flex gap-1 mt-3">
                                       {note.tags.map((tag, idx) => (
                                         <Badge key={idx} variant="secondary" className="text-xs">

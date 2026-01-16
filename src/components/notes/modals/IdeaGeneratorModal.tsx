@@ -54,9 +54,18 @@ export function IdeaGeneratorModal({
   const handleGenerate = async () => {
     try {
       const result = await onGenerate(mode, topic || undefined);
-      setIdeas(result);
+      // Ensure result is an array - convert string if needed
+      if (typeof result === "string") {
+        const ideasArray = result.split(/\n(?=\d+\.)/).map(s => s.trim()).filter(Boolean);
+        setIdeas(ideasArray);
+      } else if (Array.isArray(result)) {
+        setIdeas(result);
+      } else {
+        setIdeas([]);
+      }
     } catch (error) {
       console.error("Idea generation failed:", error);
+      setIdeas([]);
     }
   };
 
@@ -68,7 +77,7 @@ export function IdeaGeneratorModal({
   };
 
   const formatIdeas = (): string => {
-    return ideas.map((idea, idx) => `${idx + 1}. ${idea}`).join("\n");
+    return Array.isArray(ideas) ? ideas.map((idea, idx) => `${idx + 1}. ${idea}`).join("\n") : "";
   };
 
   return (
@@ -127,7 +136,7 @@ export function IdeaGeneratorModal({
             )}
           </Button>
 
-          {ideas.length > 0 && (
+          {Array.isArray(ideas) && ideas.length > 0 && (
             <div className="space-y-2">
               <Label>Generated Ideas</Label>
               <ScrollArea className="h-[180px] rounded-md border bg-muted/50 p-3">

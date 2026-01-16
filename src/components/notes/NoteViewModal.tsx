@@ -189,7 +189,7 @@ export function NoteViewModal({ note, open, onClose, onUpdate, onDelete, categor
           )}
 
           {/* Tags */}
-          {note.tags?.length > 0 && !isEditing && (
+          {note.tags && Array.isArray(note.tags) && note.tags.length > 0 && !isEditing && (
             <div className="flex gap-1 flex-wrap">
               {note.tags.map((tag, idx) => (
                 <Badge key={idx} variant="secondary" className="text-xs">

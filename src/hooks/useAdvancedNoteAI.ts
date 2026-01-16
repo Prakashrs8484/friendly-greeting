@@ -20,7 +20,6 @@ import {
   DialogueStyle,
   IdeaMode,
   ActionItem,
-  CompareResult,
 } from "@/lib/noteAiApi";
 
 export function useAdvancedNoteAI() {
@@ -84,7 +83,12 @@ export function useAdvancedNoteAI() {
     (mode: IdeaMode, topic?: string) =>
       withLoading("ideas", async () => {
         const res = await ideaGeneratorApi(mode, topic);
-        return res.ideas;
+        const raw = res.ideas;
+        // Convert string response to array if needed
+        if (typeof raw === "string") {
+          return raw.split(/\n(?=\d+\.)/).map(s => s.trim()).filter(Boolean);
+        }
+        return Array.isArray(raw) ? raw : [];
       }),
     [withLoading]
   );
@@ -135,7 +139,7 @@ export function useAdvancedNoteAI() {
   );
 
   const compareTexts = useCallback(
-    (textA: string, textB: string): Promise<CompareResult> =>
+    (textA: string, textB: string): Promise<string> =>
       withLoading("compare", async () => {
         return await compareTextsApi(textA, textB);
       }),

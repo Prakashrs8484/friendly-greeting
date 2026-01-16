@@ -16,9 +16,9 @@ const { bulletExtractorController } = require("../controllers/bulletExtractor.co
 const { actionItemsController } = require("../controllers/actionItems.controller");
 const { academicImproveController } = require("../controllers/academicImprove.controller");
 const { compareTextsController } = require("../controllers/compareTexts.controller");
-const { argumentStrengthenerController } = require("../controllers/argumentStrengthener.controller");
+const { strengthenArgumentController } = require("../controllers/strengthenArgument.controller");
 
-router.post("/strengthen", auth, argumentStrengthenerController);
+router.post("/strengthen", auth, strengthenArgumentController);
 router.post("/compare", auth, compareTextsController);
 router.post("/improve-academic", auth, academicImproveController);
 router.post("/actions", auth, actionItemsController);
