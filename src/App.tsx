@@ -17,6 +17,7 @@ import NeuraNotes from "./pages/NeuraNotes";
 import WriterNotes from "./pages/notes/WriterNotes";
 import GeneralNotes from "./pages/notes/GeneralNotes";
 import AcademicNotes from "./pages/notes/AcademicNotes";
+import FitnessCoachPage from "./pages/FitnessCoachPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/finance" element={<FinancePage />} />
             <Route path="/nutrition" element={<NutritionPage />} />
             <Route path="/lifestyle" element={<LifestylePage />} />
+            <Route path="/fitness-coach" element={<FitnessCoachPage />} />
             <Route path="/neuranotes" element={<NeuraNotes />} />
             <Route path="/notes/writer" element={<WriterNotes />} />
             <Route path="/notes/general" element={<GeneralNotes />} />
