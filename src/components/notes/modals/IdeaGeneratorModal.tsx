@@ -56,10 +56,10 @@ export function IdeaGeneratorModal({
       const result = await onGenerate(mode, topic || undefined);
       // Ensure result is an array - convert string if needed
       if (typeof result === "string") {
-        const ideasArray = result.split(/\n(?=\d+\.)/).map(s => s.trim()).filter(Boolean);
+        const ideasArray = (result as string).split(/\n(?=\d+\.)/).map(s => s.trim()).filter(Boolean);
         setIdeas(ideasArray);
       } else if (Array.isArray(result)) {
-        setIdeas(result);
+        setIdeas(result as string[]);
       } else {
         setIdeas([]);
       }

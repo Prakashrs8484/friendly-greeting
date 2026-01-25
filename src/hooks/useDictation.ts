@@ -1,5 +1,6 @@
+// src/hooks/useDictation.ts
 import { useState, useRef, useCallback } from "react";
-import { API_BASE } from "@/lib/api";
+import { apiFormRequest } from "@/lib/apiService";
 
 interface UseDictationOptions {
   onTranscription: (text: string) => void;
@@ -7,11 +8,16 @@ interface UseDictationOptions {
   onSuccess?: () => void;
 }
 
+interface TranscriptionResponse {
+  text?: string;
+  transcription?: string;
+}
+
 export function useDictation({ onTranscription, onError, onSuccess }: UseDictationOptions) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -27,6 +33,38 @@ export function useDictation({ onTranscription, onError, onSuccess }: UseDictati
     return true;
   }, []);
 
+  const sendAudioForTranscription = useCallback(
+    async (audioBlob: Blob) => {
+      setIsProcessing(true);
+
+      try {
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "recording.webm");
+
+        const data = await apiFormRequest<TranscriptionResponse>(
+          "/api/notes/speech-to-text",
+          formData
+        );
+
+        const transcribedText = data.text || data.transcription || "";
+
+        if (transcribedText) {
+          onTranscription(transcribedText);
+          onSuccess?.();
+        } else {
+          onError("No transcription returned. Please try again.");
+        }
+      } catch (err: unknown) {
+        console.error("Transcription error:", err);
+        const message = err instanceof Error ? err.message : "Transcription failed. Please try again.";
+        onError(message);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [onTranscription, onError, onSuccess]
+  );
+
   const startRecording = useCallback(async () => {
     if (!checkSupport()) {
       onError("Microphone not supported in this browser");
@@ -35,7 +73,7 @@ export function useDictation({ onTranscription, onError, onSuccess }: UseDictati
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       const mimeType = MediaRecorder.isTypeSupported("audio/webm")
         ? "audio/webm"
         : MediaRecorder.isTypeSupported("audio/mp4")
@@ -54,9 +92,9 @@ export function useDictation({ onTranscription, onError, onSuccess }: UseDictati
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        
+
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
-        
+
         if (audioBlob.size === 0) {
           onError("No audio recorded. Please try again.");
           setIsRecording(false);
@@ -68,15 +106,16 @@ export function useDictation({ onTranscription, onError, onSuccess }: UseDictati
 
       mediaRecorder.start();
       setIsRecording(true);
-    } catch (err: any) {
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+    } catch (err: unknown) {
+      const error = err as { name?: string };
+      if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
         onError("Microphone permission denied. Please allow microphone access.");
       } else {
         onError("Failed to start recording. Please try again.");
       }
       console.error("Recording error:", err);
     }
-  }, [checkSupport, onError]);
+  }, [checkSupport, onError, sendAudioForTranscription]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -92,45 +131,6 @@ export function useDictation({ onTranscription, onError, onSuccess }: UseDictati
       startRecording();
     }
   }, [isRecording, startRecording, stopRecording]);
-
-  const sendAudioForTranscription = async (audioBlob: Blob) => {
-    setIsProcessing(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "recording.webm");
-
-      const token = localStorage.getItem("token");
-      
-      const response = await fetch(`${API_BASE}/api/notes/speech-to-text`, {
-        method: "POST",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Transcription failed: ${errorText}`);
-      }
-
-      const data = await response.json();
-      const transcribedText = data.text || data.transcription || "";
-
-      if (transcribedText) {
-        onTranscription(transcribedText);
-        onSuccess?.();
-      } else {
-        onError("No transcription returned. Please try again.");
-      }
-    } catch (err: any) {
-      console.error("Transcription error:", err);
-      onError(err.message || "Transcription failed. Please try again.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   return {
     isRecording,

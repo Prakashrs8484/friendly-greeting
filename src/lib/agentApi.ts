@@ -1,26 +1,7 @@
-// src/lib/agentApi.ts - Agent API functions
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+// src/lib/agentApi.ts
+// Agent API functions using centralized apiService
 
-function getToken() {
-  return localStorage.getItem("token");
-}
-
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...((opts.headers as Record<string, string>) || {}),
-  };
-
-  const token = getToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(API_BASE + path, { ...opts, headers });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API ${res.status} ${res.statusText} - ${body}`);
-  }
-  return res.json();
-}
+import { apiRequest } from "./apiService";
 
 export interface AgentQueryResponse {
   reply: string;
@@ -30,7 +11,7 @@ export interface AgentQueryResponse {
     title: string;
     excerpt: string;
   }>;
-  savedMemory?: any;
+  savedMemory?: unknown;
 }
 
 export interface AgentMemory {
@@ -39,21 +20,26 @@ export interface AgentMemory {
   title: string;
   content: string;
   excerpt: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 }
 
 // Send query to the AI agent
-export async function agentQueryApi(query: string, topK: number = 5): Promise<AgentQueryResponse> {
-  return request("/api/agent/query", {
+export async function agentQueryApi(
+  query: string,
+  topK: number = 5
+): Promise<AgentQueryResponse> {
+  return apiRequest("/api/agent/query", {
     method: "POST",
     body: JSON.stringify({ query, topK }),
   });
 }
 
 // Update live draft (debounced from frontend)
-export async function updateLiveDraftApi(text: string): Promise<{ success: boolean }> {
-  return request("/api/agent/live", {
+export async function updateLiveDraftApi(
+  text: string
+): Promise<{ success: boolean }> {
+  return apiRequest("/api/agent/live", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
@@ -61,12 +47,12 @@ export async function updateLiveDraftApi(text: string): Promise<{ success: boole
 
 // Get all memories
 export async function getMemoriesApi(): Promise<AgentMemory[]> {
-  return request("/api/agent/memories");
+  return apiRequest("/api/agent/memories");
 }
 
 // Search memories/notes
 export async function searchMemoriesApi(query: string): Promise<AgentMemory[]> {
-  return request("/api/agent/search", {
+  return apiRequest("/api/agent/search", {
     method: "POST",
     body: JSON.stringify({ query }),
   });
