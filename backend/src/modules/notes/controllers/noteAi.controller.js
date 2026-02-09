@@ -1,5 +1,5 @@
 const { correctNote, paraphraseNote } = require("../services/noteAi.service");
-const { generateSpeech } = require("../../system/services/tts.service");
+const { generateSpeech } = require("../../system/uploads/services/tts.service");
 const Note = require("../models/Note");
 
 // Improve grammar + punctuation
