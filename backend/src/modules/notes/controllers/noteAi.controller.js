@@ -1,4 +1,5 @@
 const { correctNote, paraphraseNote } = require("../services/noteAi.service");
+const { generateSpeech } = require("../../system/services/tts.service");
 const Note = require("../models/Note");
 
 // Improve grammar + punctuation
@@ -49,5 +50,28 @@ exports.paraphraseNoteController = async (req, res) => {
   } catch (err) {
     console.error("paraphraseNoteController error:", err?.response?.data || err.message || err);
     return res.status(500).json({ error: "Failed to paraphrase note", details: err.message || err });
+  }
+};
+
+// Text-to-Speech endpoint
+exports.textToSpeechController = async (req, res) => {
+  try {
+    const { text, voice = "alloy", model = "tts-1", response_format = "mp3" } = req.body;
+
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Text is required and must be a non-empty string." });
+    }
+
+    const audioBuffer = await generateSpeech({ text: text.trim(), voice, model, response_format });
+
+    res.set({
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': audioBuffer.length,
+    });
+
+    res.send(audioBuffer);
+  } catch (err) {
+    console.error("textToSpeechController error:", err?.response?.data || err.message || err);
+    return res.status(500).json({ error: "Failed to generate speech", details: err.message || err });
   }
 };

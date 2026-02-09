@@ -17,10 +17,14 @@ const { actionItemsController } = require("./controllers/actionItems.controller"
 const { academicImproveController } = require("./controllers/academicImprove.controller");
 const { compareTextsController } = require("./controllers/compareTexts.controller");
 const { strengthenArgumentController } = require("./controllers/strengthenArgument.controller");
+const { paraphraseNoteController } = require("./controllers/noteAi.controller");
+const { generalImproveController } = require("./controllers/generalImprove.controller");
 
 router.post("/strengthen", auth, strengthenArgumentController);
+router.post("/paraphrase", auth, paraphraseNoteController);
 router.post("/compare", auth, compareTextsController);
 router.post("/improve-academic", auth, academicImproveController);
+router.post("/improve", auth, generalImproveController);
 router.post("/actions", auth, actionItemsController);
 router.post("/bullets", auth, bulletExtractorController);
 router.post("/structure", auth, structureDocumentController);
