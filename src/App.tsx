@@ -18,6 +18,9 @@ import WriterNotes from "./pages/notes/WriterNotes";
 import GeneralNotes from "./pages/notes/GeneralNotes";
 import AcademicNotes from "./pages/notes/AcademicNotes";
 import FitnessCoachPage from "./pages/FitnessCoachPage";
+import AgentPagesOverview from "./pages/AgentPagesOverview";
+import CreateAgentPage from "./pages/CreateAgentPage";
+import AgentPageWorkspace from "./pages/AgentPageWorkspace";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +43,9 @@ const App = () => (
             <Route path="/nutrition" element={<NutritionPage />} />
             <Route path="/lifestyle" element={<LifestylePage />} />
             <Route path="/fitness-coach" element={<FitnessCoachPage />} />
+            <Route path="/agent-pages" element={<AgentPagesOverview />} />
+            <Route path="/agent-pages/create" element={<CreateAgentPage />} />
+            <Route path="/agent-pages/:pageId" element={<AgentPageWorkspace />} />
             <Route path="/neuranotes" element={<NeuraNotes />} />
             <Route path="/notes/writer" element={<WriterNotes />} />
             <Route path="/notes/general" element={<GeneralNotes />} />

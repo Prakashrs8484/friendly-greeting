@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Brain, LayoutDashboard, Target, TrendingUp, Heart, Apple, Clock, BookOpen, Settings, LogOut, Menu } from "lucide-react";
+import { Brain, LayoutDashboard, Target, TrendingUp, Heart, Apple, Clock, BookOpen, Settings, LogOut, Menu, Dumbbell, Layers } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
@@ -150,8 +150,10 @@ const navItems = [
   { icon: TrendingUp, label: "Finance", path: "/finance" },
   { icon: Heart, label: "Health & Fitness", path: "/health" },
   { icon: Apple, label: "Nutrition", path: "/nutrition" },
+  { icon: Dumbbell, label: "Fitness Coach", path: "/fitness-coach" },
   { icon: Clock, label: "Lifestyle", path: "/lifestyle" },
   { icon: BookOpen, label: "NeuraNotes", path: "/neuranotes" },
+  { icon: Layers, label: "Agent Pages", path: "/agent-pages" },
 ];
 
 export default DashboardLayout;
