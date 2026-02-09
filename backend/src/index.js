@@ -17,6 +17,7 @@ const notesRoutes = require('./modules/notes/notes.routes');
 const nutritionRoutes = require('./modules/nutrition/nutrition.routes');
 const healthRoutes = require('./modules/health/health.routes');
 const lifestyleRoutes = require('./modules/lifestyle/lifestyle.routes');
+const agentPagesRoutes = require('./modules/agentPages/agentPage.routes');
 
 // ========== APP SETUP ==========
 const app = express();
@@ -41,6 +42,7 @@ app.use('/api/notes', notesRoutes);
 app.use('/api/nutrition', nutritionRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/lifestyle', lifestyleRoutes);
+app.use('/api/agent-pages', agentPagesRoutes);
 
 // Backward compatibility routes (maintain existing API paths)
 app.use('/api/planning', planningRoutes);
@@ -48,5 +50,5 @@ app.use('/api/ai/action', aiActionRoutes);
 
 app.get('/', (req, res) => res.json({ status: 'NeuraDesk backend (Option 1) running' }));
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4002;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
