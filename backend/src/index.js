@@ -48,6 +48,19 @@ app.use('/api/agent-pages', agentPagesRoutes);
 app.use('/api/planning', planningRoutes);
 app.use('/api/ai/action', aiActionRoutes);
 
+// 404 handler for undefined routes (must come before error handler)
+app.use((req, res) => {
+  console.error('[404] Route not found:', req.method, req.url);
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.url} not found`
+  });
+});
+
+// Global error handler middleware (must be last - catches errors from route handlers)
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
+
 app.get('/', (req, res) => res.json({ status: 'NeuraDesk backend (Option 1) running' }));
 
 const PORT = process.env.PORT || 4002;

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Settings, Bot, Send, Loader2, Sparkles, ToggleLeft, ToggleRight } from "lucide-react";
+import { ArrowLeft, Plus, Settings, Bot, Send, Loader2, Sparkles, ToggleLeft, ToggleRight, Wand2, Trash2 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,16 +28,27 @@ import {
   getAgentPage,
   createAgent,
   executeAgent,
+  getPageMessages,
+  clearAgentMessages,
+  clearPageMessages,
+  createFeature,
+  getPageFeatures,
+  deleteFeature,
   type AgentPage,
   type Agent,
   type CreateAgentPayload,
+  type PageMessage,
+  type Feature,
 } from "@/lib/agentPageApi";
+import { FeatureRenderer } from "@/components/features/FeatureRenderer";
+import { buildSampleFeatures } from "@/components/features/featurePlanSamples";
 import { toast } from "@/hooks/use-toast";
 
 interface ChatMessage {
   role: "user" | "agent";
   content: string;
   agentName?: string;
+  timestamp: Date;
 }
 
 const TONES = ["Formal", "Friendly", "Motivational", "Neutral"];
@@ -60,7 +72,15 @@ const AgentPageWorkspace = () => {
   const [verbosity, setVerbosity] = useState([50]);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [creating, setCreating] = useState(false);
+  
+  // Feature creation state
+  const [features, setFeatures] = useState<Feature[]>([]);
+  const [featureInput, setFeatureInput] = useState("");
+  const [creatingFeature, setCreatingFeature] = useState(false);
+  const [showFeatureInput, setShowFeatureInput] = useState(false);
+  const sampleFeatures = buildSampleFeatures(pageId);
 
+  // Load page data
   useEffect(() => {
     if (!pageId) return;
     const load = async () => {
@@ -68,6 +88,24 @@ const AgentPageWorkspace = () => {
         const data = await getAgentPage(pageId);
         setPage(data);
         if (data.agents?.length > 0) setSelectedAgent(data.agents[0]);
+
+        // Load existing features
+        try {
+          const response = await getPageFeatures(pageId);
+          // Handle both old format (direct array) and new format (wrapped response)
+          const pageFeatures = response.features || response || [];
+          const normalized = Array.isArray(pageFeatures)
+            ? pageFeatures.map((f) => ({
+                ...f,
+                featurePlan: f.featurePlan || (f.config as { featurePlan?: unknown } | undefined)?.featurePlan || null
+              }))
+            : [];
+          setFeatures(normalized);
+        } catch (err: any) {
+          console.error("[Feature Loading] Error:", err);
+          // Don't show error toast for loading failures, just log
+          setFeatures([]);
+        }
       } catch {
         toast({ title: "Failed to load workspace", variant: "destructive" });
       } finally {
@@ -76,6 +114,39 @@ const AgentPageWorkspace = () => {
     };
     load();
   }, [pageId]);
+
+  // Load messages for the selected agent (per-agent chat history) - FRONTEND SYNC WITH DB
+  useEffect(() => {
+    if (!pageId || !page) return;
+    const loadMessages = async () => {
+      console.log('[Frontend] [DB SYNC] Loading messages from MongoDB:', { pageId, agentId: selectedAgent?._id });
+      try {
+        // Load only the selected agent's chat thread (or all if no agent selected)
+        const response = await getPageMessages(pageId, selectedAgent?._id);
+        const pageMessages = response.messages || [];
+        console.log('[Frontend] [DB SYNC] Loaded', pageMessages.length, 'messages from DB');
+        // Convert PageMessage[] to ChatMessage[]
+        const chatMessages: ChatMessage[] = pageMessages.map((msg) => {
+          // Find agent name if it's an agent message
+          const agent = page.agents?.find((a) => a._id === msg.agentId);
+          const timestamp = msg.createdAt || msg.timestamp;
+          return {
+            role: msg.role,
+            content: msg.content,
+            agentName: msg.role === "agent" ? (agent?.name || "Agent") : undefined,
+            timestamp: timestamp ? new Date(timestamp) : new Date(),
+          };
+        });
+        setMessages(chatMessages);
+        console.log('[Frontend] [DB SYNC] Messages synced to UI:', chatMessages.length);
+      } catch (err) {
+        // If loading messages fails, just start with empty messages
+        console.error('[Frontend] [DB SYNC] Failed to load agent messages:', err);
+        setMessages([]);
+      }
+    };
+    loadMessages();
+  }, [pageId, selectedAgent?._id, page]);
 
   const handleCreateAgent = async () => {
     if (!pageId || !agentName.trim()) return;
@@ -118,23 +189,152 @@ const AgentPageWorkspace = () => {
 
   const handleSend = async () => {
     if (!input.trim() || !selectedAgent || !pageId) return;
-    const userMsg: ChatMessage = { role: "user", content: input.trim() };
+    const userMsg: ChatMessage = { role: "user", content: input.trim(), timestamp: new Date() };
+    // Optimistically add user message to UI
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setSending(true);
     try {
+      // Backend saves user message (with agentId) and returns agent response (also saved with agentId)
       const res = await executeAgent(pageId, selectedAgent._id, userMsg.content);
+      const agentReply = res.response;
+      const content = !agentReply || agentReply.trim() === '' ? "Agent is active but returned no response." : agentReply;
+      // Backend saves agent response, so we just update UI optimistically
       setMessages((prev) => [
         ...prev,
-        { role: "agent", content: res.reply, agentName: selectedAgent.name },
+        { role: "agent", content, agentName: selectedAgent.name, timestamp: new Date() },
       ]);
+      // Reload messages to ensure sync with DB (ensures consistency with MongoDB)
+      console.log('[Frontend] [DB SYNC] Reloading messages after send to sync with MongoDB...');
+      try {
+        const response = await getPageMessages(pageId, selectedAgent._id);
+        const pageMessages = response.messages || [];
+        console.log('[Frontend] [DB SYNC] Reloaded', pageMessages.length, 'messages from DB');
+        const chatMessages: ChatMessage[] = pageMessages.map((msg) => {
+          const agent = page?.agents?.find((a) => a._id === msg.agentId);
+          const timestamp = msg.createdAt || msg.timestamp;
+          return {
+            role: msg.role,
+            content: msg.content,
+            agentName: msg.role === "agent" ? (agent?.name || "Agent") : undefined,
+            timestamp: timestamp ? new Date(timestamp) : new Date(),
+          };
+        });
+        setMessages(chatMessages);
+        console.log('[Frontend] [DB SYNC] UI synced with MongoDB');
+      } catch (err) {
+        console.error('[Frontend] [DB SYNC] Failed to reload messages after send:', err);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "agent", content: "Sorry, I couldn't process that. Please try again.", agentName: selectedAgent.name },
+        { role: "agent", content: "Agent is active but returned no response.", agentName: selectedAgent.name, timestamp: new Date() },
       ]);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleCreateFeature = async () => {
+    if (!featureInput.trim() || !pageId || creatingFeature) return;
+    setCreatingFeature(true);
+    try {
+      const response = await createFeature(pageId, { input: featureInput.trim() });
+      
+      // Handle both old format (direct feature) and new format (wrapped response)
+      const newFeature = response.feature || response;
+      const normalizedFeature = {
+        ...newFeature,
+        featurePlan: newFeature.featurePlan || (newFeature.config as { featurePlan?: unknown } | undefined)?.featurePlan || null
+      };
+      
+      if (!normalizedFeature || !normalizedFeature._id) {
+        throw new Error("Invalid response from server");
+      }
+
+      setFeatures((prev) => [normalizedFeature, ...prev]);
+      setFeatureInput("");
+      setShowFeatureInput(false);
+      toast({ title: `Feature "${normalizedFeature.name}" created!` });
+      
+      // Update page agents list if needed
+      if (page && normalizedFeature.agentIds && normalizedFeature.agentIds.length > 0) {
+        setPage((prev) =>
+          prev
+            ? {
+                ...prev,
+                agents: [
+                  ...(prev.agents || []),
+                  ...normalizedFeature.agentIds.filter(
+                    (newAgent) => !prev.agents?.some((a) => a._id === newAgent._id)
+                  ),
+                ],
+              }
+            : null
+        );
+      }
+    } catch (err: any) {
+      console.error("[Feature Creation] Error:", err);
+      
+      // Extract error message from various possible formats
+      let errorMessage = "Failed to create feature. Please try again.";
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
+      // Clean up HTML error messages if any
+      if (errorMessage.includes('<html>') || errorMessage.includes('<!DOCTYPE')) {
+        errorMessage = "Server error occurred. Please check the console for details.";
+      }
+      
+      toast({
+        title: "Failed to create feature",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingFeature(false);
+    }
+  };
+
+  const handleDeleteFeature = async (feature: Feature) => {
+    if (!pageId || !feature?._id) return;
+    const confirmed = confirm(`Delete feature "${feature.name}"? This will remove its data and linked insights.`);
+    if (!confirmed) return;
+
+    // Optimistic UI update (no page reload)
+    const prevFeatures = features;
+    setFeatures((prev) => prev.filter((f) => f._id !== feature._id));
+    const featureAgentIds = (feature.agentIds || []).map((a: any) => a?._id).filter(Boolean);
+    const prevPage = page;
+    const prevSelectedAgent = selectedAgent;
+
+    if (featureAgentIds.length > 0) {
+      // Remove feature-tied agents from the agents panel immediately (no ghost agents)
+      setPage((prev) =>
+        prev
+          ? { ...prev, agents: (prev.agents || []).filter((a) => !featureAgentIds.includes(a._id)) }
+          : prev
+      );
+      // If the currently selected agent was deleted, reset selection + messages
+      if (selectedAgent && featureAgentIds.includes(selectedAgent._id)) {
+        setSelectedAgent(null);
+        setMessages([]);
+      }
+    }
+
+    try {
+      await deleteFeature(pageId, feature._id, true);
+      toast({ title: `Feature "${feature.name}" deleted` });
+    } catch (err) {
+      console.error("[Feature Delete] Error:", err);
+      // Roll back if deletion failed
+      setFeatures(prevFeatures);
+      if (prevPage) setPage(prevPage);
+      if (prevSelectedAgent) setSelectedAgent(prevSelectedAgent);
+      toast({ title: "Failed to delete feature", variant: "destructive" });
     }
   };
 
@@ -178,6 +378,93 @@ const AgentPageWorkspace = () => {
             <Settings className="w-4 h-4" />
           </Button>
         </div>
+
+        {/* Feature Creation Input */}
+        {showFeatureInput ? (
+          <Card className="mb-4 rounded-2xl bg-card border border-border p-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Wand2 className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold">Create a feature with AI</h3>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={featureInput}
+                  onChange={(e) => setFeatureInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateFeature();
+                    }
+                  }}
+                  placeholder="e.g. I want a todo feature with add, edit, delete and AI productivity insights"
+                  className="rounded-xl flex-1"
+                  disabled={creatingFeature}
+                />
+                <Button
+                  onClick={handleCreateFeature}
+                  disabled={!featureInput.trim() || creatingFeature}
+                  className="rounded-xl"
+                >
+                  {creatingFeature ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create"
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowFeatureInput(false);
+                    setFeatureInput("");
+                  }}
+                  className="rounded-xl"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <div className="mb-4">
+            <Button
+              onClick={() => setShowFeatureInput(true)}
+              variant="outline"
+              className="rounded-xl gap-2"
+            >
+              <Wand2 className="w-4 h-4" />
+              Create a feature with AI
+            </Button>
+          </div>
+        )}
+
+        {/* Features List */}
+        {features.length > 0 && (
+          <div className="mb-4 space-y-4">
+            {features.map((feature) => (
+              <FeatureRenderer
+                key={feature._id}
+                feature={feature}
+                onDeleteFeature={() => handleDeleteFeature(feature)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Sample Feature Plans (preview only) */}
+        {features.length === 0 && (
+          <div className="mb-4 space-y-4">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Sample AI Feature Plans
+            </div>
+            {sampleFeatures.map((feature) => (
+              <FeatureRenderer key={feature._id} feature={feature} />
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
           {/* Agents Panel */}
@@ -306,7 +593,7 @@ const AgentPageWorkspace = () => {
                     key={agent._id}
                     onClick={() => {
                       setSelectedAgent(agent);
-                      setMessages([]);
+                      // Messages will be reloaded for this agent via useEffect (per-agent chat history)
                     }}
                     className={`w-full text-left p-3 rounded-xl transition-all ${
                       selectedAgent?._id === agent._id
@@ -340,16 +627,37 @@ const AgentPageWorkspace = () => {
             {selectedAgent ? (
               <>
                 {/* Agent Header */}
-                <div className="p-4 border-b border-border flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Bot className="w-5 h-5 text-primary" />
+                <div className="p-4 border-b border-border flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Bot className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm">{selectedAgent.name}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedAgent.config?.role || "AI Assistant"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-sm">{selectedAgent.name}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedAgent.config?.role || "AI Assistant"}
-                    </p>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      if (!pageId || !selectedAgent?._id) return;
+                      if (!confirm(`Clear chat history with ${selectedAgent.name}? This cannot be undone.`)) return;
+                      try {
+                        await clearAgentMessages(pageId, selectedAgent._id);
+                        setMessages([]);
+                        toast({ title: "Chat history cleared" });
+                      } catch (err) {
+                        toast({ title: "Failed to clear chat", variant: "destructive" });
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    Clear Chat
+                  </Button>
                   <div className="ml-auto flex gap-1.5">
                     <Badge variant="outline" className="text-xs">
                       {selectedAgent.config?.tone || "Neutral"}
@@ -396,6 +704,12 @@ const AgentPageWorkspace = () => {
                               </p>
                             )}
                             <p className="whitespace-pre-wrap">{msg.content}</p>
+                            <span className="text-xs opacity-70 mt-1 block">
+                              {msg.timestamp.toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
                           </div>
                         </div>
                       ))}

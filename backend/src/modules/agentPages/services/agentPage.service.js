@@ -59,12 +59,15 @@ const addAgent = async (pageId, ownerId, agentData) => {
   const agent = new Agent({
     pageId,
     name: agentData.name,
-    role: agentData.role,
-    tone: agentData.tone,
-    creativity: agentData.creativity,
-    verbosity: agentData.verbosity,
-    toolsEnabled: agentData.toolsEnabled || [],
-    memoryEnabled: agentData.memoryEnabled || false
+    description: agentData.description || '',
+    // Handle both old format (direct fields) and new format (config object)
+    config: agentData.config || {
+      role: agentData.role,
+      tone: agentData.tone,
+      creativity: agentData.creativity,
+      verbosity: agentData.verbosity,
+      memoryEnabled: agentData.memoryEnabled || false
+    }
   });
   const savedAgent = await agent.save();
 

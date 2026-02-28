@@ -50,8 +50,22 @@ export async function apiRequest<T>(
     }
 
     if (!res.ok) {
-      const body = await res.text();
-      throw new ApiError(res.status, res.statusText, body || `API Error: ${res.status}`);
+      // Try to parse as JSON first, fallback to text
+      let errorMessage = `API Error: ${res.status}`;
+      try {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const jsonBody = await res.json();
+          errorMessage = jsonBody.message || jsonBody.error || JSON.stringify(jsonBody);
+        } else {
+          const textBody = await res.text();
+          errorMessage = textBody || errorMessage;
+        }
+      } catch (parseErr) {
+        // If parsing fails, use status text
+        errorMessage = res.statusText || `API Error: ${res.status}`;
+      }
+      throw new ApiError(res.status, res.statusText, errorMessage);
     }
 
     // Handle empty responses
