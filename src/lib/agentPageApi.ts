@@ -136,20 +136,79 @@ export const clearPageMessages = (pageId: string) =>
     { method: "DELETE" }
   );
 
+export type SectionVariant = "compact" | "detailed" | "minimal";
+
+export type SectionComponentType =
+  | "form"
+  | "list"
+  | "table"
+  | "kanban"
+  | "calendar"
+  | "timeline"
+  | "chart-bar"
+  | "chart-line"
+  | "chart-pie"
+  | "kpi-grid"
+  | "tabs"
+  | "accordion"
+  | "progressTracker"
+  | "comparisonTable"
+  | "filterBar"
+  | "tagSelector"
+  | "streakTracker"
+  | "metricBoard"
+  | "insightPanel"
+  | "chart"
+  | "summaryCard";
+
+export interface LayoutSchema {
+  type: "grid" | "dashboard" | "vertical" | "sidebar";
+  columns?: number;
+}
+
+export interface FeatureFieldSchema {
+  name: string;
+  type: "text" | "number" | "date" | "time" | "select" | "textarea";
+  label: string;
+  required?: boolean;
+  options?: Array<string | { label: string; value: string }>;
+}
+
+export interface FeatureSectionSchema {
+  id: string;
+  component: SectionComponentType | string;
+  variant?: SectionVariant;
+  label: string;
+  description?: string;
+  fields?: FeatureFieldSchema[] | string[];
+  props?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface PageBlueprint {
+  featureName?: string;
+  description?: string;
+  layout?: LayoutSchema | "grid" | "dashboard" | "vertical" | "sidebar";
+  sections?: FeatureSectionSchema[];
+  dataModel?: string[];
+  aiCapabilities?: string[];
+}
+
 // Feature types
 export interface Feature {
   _id: string;
   pageId: string;
   name: string;
   description: string;
-  type: "todo" | "notes" | "advice" | "tracker" | "insights" | "ideas" | "research-tracker" | "custom";
+  type?: "todo" | "notes" | "advice" | "tracker" | "insights" | "ideas" | "research-tracker" | "custom";
   category?: "functional" | "chat";
-  uiConfig: {
+  uiConfig?: {
     layout: "crud" | "input-output" | "list" | "dashboard" | "custom";
     components: string[];
     actions: string[];
   };
-  config: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  pageBlueprint?: PageBlueprint | null;
   featurePlan?: FeaturePlan | null;
   agentIds: Agent[];
   originalInput: string;
@@ -161,13 +220,10 @@ export interface FeaturePlan {
   _id?: string;
   pageId?: string;
   featureName: string;
-  type: "ideas" | "todo" | "notes" | "planner" | "analytics" | "decision" | string;
+  type?: "ideas" | "todo" | "notes" | "planner" | "analytics" | "decision" | string;
   description: string;
-  ui: Array<{
-    component: string;
-    editable?: boolean;
-    variant?: string;
-  }>;
+  layout?: string | LayoutSchema;
+  sections: FeatureSectionSchema[];
   dataModel: string[];
   aiCapabilities: string[];
   createdAt?: string;

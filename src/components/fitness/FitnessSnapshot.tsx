@@ -66,6 +66,10 @@ export function FitnessSnapshot({
   const isDeficit = calorieBalance < 0;
   const proteinProgress = Math.min((proteinIntake / proteinTarget) * 100, 100);
   const workoutProgress = Math.min((workoutMinutes / workoutTarget) * 100, 100);
+  const calorieReference = Math.max(
+    goal === "fat_loss" ? caloriesOut * 0.8 : caloriesOut * 1.1,
+    1
+  );
 
   const stats = [
     {
@@ -73,7 +77,7 @@ export function FitnessSnapshot({
       value: `${caloriesIn.toLocaleString()}`,
       subValue: `/ ${caloriesOut.toLocaleString()} burned`,
       icon: Flame,
-      progress: Math.min((caloriesIn / (goal === "fat_loss" ? caloriesOut * 0.8 : caloriesOut * 1.1)) * 100, 100),
+      progress: Math.min((caloriesIn / calorieReference) * 100, 100),
       status: isDeficit ? "deficit" : "surplus",
       statusLabel: `${Math.abs(calorieBalance)} cal ${isDeficit ? "deficit" : "surplus"}`,
     },

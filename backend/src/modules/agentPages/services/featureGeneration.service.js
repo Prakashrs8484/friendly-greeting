@@ -5,49 +5,50 @@ const FeaturePlan = require('../models/featurePlan.model');
 const { parseIntent } = require('./intentParser.service');
 const { getTemplate } = require('./featureTemplates.service');
 const { addAgent } = require('./agentPage.service');
+const { buildContextualSections } = require('./featureArchitect.service');
 
 /**
- * AI Feature Planner
- * Turns a natural-language idea into a structured feature plan (Lovable-style).
+ * AI Feature Planner - FULLY DYNAMIC SCHEMA-DRIVEN
+ * Turns natural language into a flexible UI schema with contextual labels.
  *
- * This does NOT chat with the user. It only returns a structured JSON plan
- * describing:
- * - featureName
- * - type (planner-level type: tracker, planner, analytics, knowledge-collection, action-tool)
- * - description
- * - ui blocks (NeuraDesk-style components, no raw JSX)
- * - dataModel (entity fields)
- * - aiCapabilities (suggestions / insights / summaries / planning assistance)
+ * Generates:
+ * - featureName: Extracted from user input (exact match)
+ * - description: User's original request
+ * - sections: Contextually-labeled generic components based on domain
+ * - dataModel: Entity fields specific to the domain
+ * - aiCapabilities: AI-powered features relevant to the domain
  *
- * NOTE: The returned plan is stored in the Feature document (config.featurePlan)
- * and the frontend can render UI dynamically from this plan.
+ * NO hardcoded feature types. NO generic labels like "Entries" or "Daily Ideas".
+ * Each feature has unique, domain-appropriate section names.
  */
 const buildFeaturePlan = (userInput, intent, template) => {
   const lowerInput = userInput.toLowerCase();
 
-  // 1) Classify high-level planner type
-  let plannerType = 'planner';
-  if (lowerInput.includes('track') || lowerInput.includes('tracker') || lowerInput.includes('log')) {
-    plannerType = 'tracker';
+  // Feature name & description - ALWAYS from user input, never from template
+  // Convert user input to proper feature name (title case, remove extra words)
+  let featureName = userInput.trim();
+  
+  // Title case the feature name
+  featureName = featureName
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  
+  // Truncate if too long
+  if (featureName.length > 60) {
+    featureName = featureName.slice(0, 57) + '...';
   }
-  if (lowerInput.includes('analytics') || lowerInput.includes('dashboard') || lowerInput.includes('report') || lowerInput.includes('insight')) {
-    plannerType = 'analytics';
-  }
-  if (lowerInput.includes('decision') || lowerInput.includes('decide') || lowerInput.includes('choice')) {
-    plannerType = 'decision';
-  }
-  if (lowerInput.includes('knowledge') || lowerInput.includes('notes') || lowerInput.includes('wiki') || lowerInput.includes('library')) {
-    plannerType = 'knowledge-collection';
-  }
-  if (lowerInput.includes('automate') || lowerInput.includes('action') || lowerInput.includes('trigger') || lowerInput.includes('send')) {
-    plannerType = 'action-tool';
-  }
+  
+  const description = userInput;
 
-  // 2) Feature name & description
-  const featureName = template?.name || (userInput.length > 60 ? `${userInput.slice(0, 57)}...` : userInput);
-  const description = template?.description || userInput;
+  // Detect feature purpose from input
+  const isTracker = lowerInput.includes('track') || lowerInput.includes('tracker') || lowerInput.includes('log') || lowerInput.includes('monitor');
+  const isAnalytics = lowerInput.includes('analytics') || lowerInput.includes('dashboard') || lowerInput.includes('report') || lowerInput.includes('insight') || lowerInput.includes('analyze');
+  const isDecision = lowerInput.includes('decision') || lowerInput.includes('decide') || lowerInput.includes('choice') || lowerInput.includes('compare');
+  const isPlanner = lowerInput.includes('plan') || lowerInput.includes('schedule') || lowerInput.includes('goal');
+  const isKnowledge = lowerInput.includes('knowledge') || lowerInput.includes('notes') || lowerInput.includes('wiki') || lowerInput.includes('library') || lowerInput.includes('organize');
 
-  // 3) Data model based on concrete feature type
+  // Data model based on intent
   const dataModel = [];
   switch (intent.type) {
     case 'todo':
@@ -73,70 +74,41 @@ const buildFeaturePlan = (userInput, intent, template) => {
       break;
   }
 
-  // 4) UI blocks (NeuraDesk style, no raw JSX)
-  const ui = [];
-  if (plannerType === 'tracker') {
-    ui.push(
-      { component: 'PrimaryList', editable: true },
-      { component: 'StatusSummaryBar' },
-      { component: 'TrendChart', variant: 'placeholder' },
-      { component: 'InsightsPanel' }
-    );
-  } else if (plannerType === 'analytics') {
-    ui.push(
-      { component: 'SummaryCards' },
-      { component: 'TrendChart', variant: 'placeholder' },
-      { component: 'BreakdownChart', variant: 'placeholder' },
-      { component: 'InsightsPanel' }
-    );
-  } else if (plannerType === 'decision') {
-    ui.push(
-      { component: 'DecisionPrompt' },
-      { component: 'OptionsList', editable: true },
-      { component: 'RecommendationPanel' }
-    );
-  } else if (plannerType === 'knowledge-collection') {
-    ui.push(
-      { component: 'CollectionList', editable: true },
-      { component: 'DetailPanel' },
-      { component: 'InsightsPanel' }
-    );
-  } else if (plannerType === 'action-tool') {
-    ui.push(
-      { component: 'ActionQueueList', editable: true },
-      { component: 'ActionSummary' },
-      { component: 'InsightsPanel' }
-    );
-  } else {
-    // Generic planner
-    ui.push(
-      { component: 'GoalList', editable: true },
-      { component: 'WeeklySummaryCard' },
-      { component: 'InsightsPanel' }
-    );
-  }
+  // ✨ USE FEATURE ARCHITECT - Build sections with contextual labels
+  // Instead of generic "Add Entry", "Entries", "Total Count", etc.,
+  // the architect generates domain-specific labels like:
+  // "Log Workout", "Workout History", "Total Workouts", "Fitness Trends", "Fitness Insights"
+  const sections = buildContextualSections(
+    userInput,
+    isTracker,
+    isAnalytics,
+    isDecision,
+    isPlanner
+  );
 
-  // 5) AI capabilities
+  // AI capabilities based on purpose
   const aiCapabilities = [];
-  if (plannerType === 'tracker') {
-    aiCapabilities.push('highlight trends', 'detect streaks or regressions', 'suggest next actions');
-  } else if (plannerType === 'planner') {
-    aiCapabilities.push('suggest priorities', 'detect overload', 'summarize plan for the period');
-  } else if (plannerType === 'decision') {
-    aiCapabilities.push('summarize options', 'weigh pros and cons', 'suggest a recommendation');
-  } else if (plannerType === 'analytics') {
-    aiCapabilities.push('surface key metrics', 'explain anomalies', 'suggest next questions to ask');
-  } else if (plannerType === 'knowledge-collection') {
-    aiCapabilities.push('summarize clusters of items', 'suggest tags or categories', 'surface related items');
-  } else if (plannerType === 'action-tool') {
-    aiCapabilities.push('recommend next actions', 'batch similar tasks', 'suggest automation opportunities');
+  if (isTracker) {
+    aiCapabilities.push('highlight trends', 'detect patterns', 'suggest improvements');
+  }
+  if (isAnalytics) {
+    aiCapabilities.push('surface insights', 'explain anomalies', 'predict trends');
+  }
+  if (isDecision) {
+    aiCapabilities.push('compare options', 'weigh pros/cons', 'recommend choice');
+  }
+  if (isPlanner) {
+    aiCapabilities.push('prioritize tasks', 'suggest schedule', 'identify gaps');
+  }
+  if (!aiCapabilities.length) {
+    aiCapabilities.push('provide suggestions', 'analyze data', 'answer questions');
   }
 
   return {
     featureName,
-    type: plannerType,
     description,
-    ui,
+    layout: 'custom',
+    sections, // ✅ CONTEXTUAL sections with domain-appropriate labels
     dataModel,
     aiCapabilities
   };
@@ -180,24 +152,13 @@ const generateFeature = async (pageId, ownerId, userInput) => {
     const featurePlan = buildFeaturePlan(userInput, intent, template);
     console.log('[Feature Generation] Built feature plan:', featurePlan);
 
-    // 4. Merge user requirements with template
-    // Generate feature name from user input if it contains specific keywords
-    let featureName = featurePlan.featureName || template.name;
-    const lowerInput = userInput.toLowerCase();
+    // 4. Use AI-generated featurePlan directly - NO template overrides
+    // The AI has determined the optimal structure; trust it completely
+    const featureName = featurePlan.featureName;
+    const featureDescription = featurePlan.description;
     
-    // Extract custom name from user input
-    if (lowerInput.includes('daily ideas') || lowerInput.includes('daily idea')) {
-      featureName = 'Daily Ideas';
-    } else if (lowerInput.includes('research') && (lowerInput.includes('track') || lowerInput.includes('keep'))) {
-      featureName = 'Research Tracker';
-    } else if (lowerInput.includes('ideas') && !lowerInput.includes('daily')) {
-      featureName = 'Ideas';
-    }
-    
-    const featureDescription = featurePlan.description || template.description || userInput;
-    
-    // Merge actions from user input with template defaults
-    const actions = [...new Set([...template.uiConfig.actions, ...intent.requirements.actions])];
+    console.log('[Feature Generation] Using AI-generated feature name:', featureName);
+    console.log('[Feature Generation] Using AI-generated sections:', featurePlan.sections.map(s => s.component).join(', '));
     
     // 5. Create feature
     const feature = new Feature({
@@ -207,14 +168,14 @@ const generateFeature = async (pageId, ownerId, userInput) => {
       type: intent.type,
       category: template.category || intent.category || 'functional',
       uiConfig: {
-        layout: template.uiConfig.layout,
-        components: template.uiConfig.components,
-        actions: actions
+        layout: featurePlan.layout || 'custom',
+        // NOTE: uiConfig is deprecated - frontend uses featurePlan.sections
+        components: [],
+        actions: []
       },
       config: {
-        ...template.config,
-        topics: intent.requirements.topics.length > 0 ? intent.requirements.topics : template.config.topics || [],
         // Store the AI Feature Planner plan so the frontend can render dynamically
+        // This is the ONLY source of truth for UI rendering
         featurePlan
       },
       originalInput: userInput,
@@ -257,9 +218,9 @@ const generateFeature = async (pageId, ownerId, userInput) => {
       const planDoc = new FeaturePlan({
         pageId,
         featureName: featurePlan.featureName,
-        type: featurePlan.type,
+        type: intent.type, // Use parsed intent type
         description: featurePlan.description,
-        ui: featurePlan.ui,
+        ui: featurePlan.sections || [], // Map 'sections' from buildFeaturePlan to 'ui' in schema
         dataModel: featurePlan.dataModel,
         aiCapabilities: featurePlan.aiCapabilities
       });

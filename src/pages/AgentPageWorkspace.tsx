@@ -40,8 +40,7 @@ import {
   type PageMessage,
   type Feature,
 } from "@/lib/agentPageApi";
-import { FeatureRenderer } from "@/components/features/FeatureRenderer";
-import { buildSampleFeatures } from "@/components/features/featurePlanSamples";
+import { DynamicFeatureRenderer } from "@/components/features/DynamicFeatureRenderer";
 import { toast } from "@/hooks/use-toast";
 
 interface ChatMessage {
@@ -78,7 +77,7 @@ const AgentPageWorkspace = () => {
   const [featureInput, setFeatureInput] = useState("");
   const [creatingFeature, setCreatingFeature] = useState(false);
   const [showFeatureInput, setShowFeatureInput] = useState(false);
-  const sampleFeatures = buildSampleFeatures(pageId);
+
 
   // Load page data
   useEffect(() => {
@@ -445,7 +444,7 @@ const AgentPageWorkspace = () => {
         {features.length > 0 && (
           <div className="mb-4 space-y-4">
             {features.map((feature) => (
-              <FeatureRenderer
+              <DynamicFeatureRenderer
                 key={feature._id}
                 feature={feature}
                 onDeleteFeature={() => handleDeleteFeature(feature)}
@@ -454,15 +453,14 @@ const AgentPageWorkspace = () => {
           </div>
         )}
 
-        {/* Sample Feature Plans (preview only) */}
-        {features.length === 0 && (
-          <div className="mb-4 space-y-4">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">
-              Sample AI Feature Plans
-            </div>
-            {sampleFeatures.map((feature) => (
-              <FeatureRenderer key={feature._id} feature={feature} />
-            ))}
+        {/* Empty State Message */}
+        {features.length === 0 && !showFeatureInput && (
+          <div className="mb-4">
+            <Card className="rounded-2xl bg-card border border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No features yet. Use <strong>'Create Feature with AI'</strong> to add one.
+              </p>
+            </Card>
           </div>
         )}
 

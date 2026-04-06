@@ -22,6 +22,7 @@ interface TimelineItem {
   id: string;
   type: "breakfast" | "lunch" | "snack" | "dinner" | "workout" | "activity" | "water";
   time: string;
+  sortKey?: number;
   title: string;
   description?: string;
   calories?: number;
@@ -77,6 +78,9 @@ export function TodayTimeline({ items, waterIntake, waterTarget, onEditItem, onA
   };
 
   const sortedItems = [...items].sort((a, b) => {
+    if (typeof a.sortKey === "number" && typeof b.sortKey === "number") {
+      return a.sortKey - b.sortKey;
+    }
     const timeA = a.time.replace(":", "");
     const timeB = b.time.replace(":", "");
     return timeA.localeCompare(timeB);
@@ -210,17 +214,19 @@ export function TodayTimeline({ items, waterIntake, waterTarget, onEditItem, onA
                               </span>
                             </div>
                           )}
-                          <div className="flex justify-end pt-2">
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              className="h-7 text-xs"
-                              onClick={() => onEditItem?.(item.id)}
-                            >
-                              <Edit2 className="w-3 h-3 mr-1" />
-                              Edit
-                            </Button>
-                          </div>
+                          {onEditItem && (
+                            <div className="flex justify-end pt-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs"
+                                onClick={() => onEditItem(item.id)}
+                              >
+                                <Edit2 className="w-3 h-3 mr-1" />
+                                Edit
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </CollapsibleContent>

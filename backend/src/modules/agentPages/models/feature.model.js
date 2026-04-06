@@ -1,86 +1,160 @@
 const mongoose = require('mongoose');
 
-/**
- * Feature model for auto-generated features within Agent Pages
- * Features are created from natural language descriptions and include:
- * - UI configuration (layout, components, actions)
- * - Associated agents
- * - Feature-specific data models
- * 
- * TODO: Future enhancements:
- * - Advanced intent understanding: Use LLM for complex feature parsing
- * - Dynamic UI generation: Generate UI components programmatically
- * - Agent collaboration: Enable features to use multiple agents together
- * - Long-term memory: RAG integration for feature-specific context
- */
+const SUPPORTED_LAYOUTS = ['vertical', 'grid', 'sidebar', 'dashboard'];
+const SUPPORTED_COMPONENTS = [
+  'form',
+  'list',
+  'table',
+  'kanban',
+  'calendar',
+  'timeline',
+  'chart-bar',
+  'chart-line',
+  'chart-pie',
+  'kpi-grid',
+  'tabs',
+  'accordion',
+  'progressTracker',
+  'comparisonTable',
+  'filterBar',
+  'tagSelector',
+  'streakTracker',
+  'metricBoard',
+  'insightPanel',
+  // Legacy support for older saved blueprints.
+  'chart',
+  'summaryCard',
+];
+
+const fieldSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    type: {
+      type: String,
+      enum: ['text', 'number', 'date', 'time', 'select', 'textarea'],
+      required: true,
+    },
+    label: { type: String, required: true },
+    required: { type: Boolean, default: false },
+    options: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  },
+  { _id: false, strict: false }
+);
+
+const sectionSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    component: {
+      type: String,
+      enum: SUPPORTED_COMPONENTS,
+      required: true,
+    },
+    variant: {
+      type: String,
+      enum: ['compact', 'detailed', 'minimal'],
+      default: undefined,
+    },
+    label: { type: String, required: true },
+    description: { type: String, default: '' },
+    fields: { type: [fieldSchema], default: [] },
+    props: { type: mongoose.Schema.Types.Mixed, default: {} },
+  },
+  { _id: false, strict: false }
+);
+
+const validateLayout = (layout) => {
+  if (typeof layout === 'string') {
+    return SUPPORTED_LAYOUTS.includes(layout);
+  }
+
+  if (!layout || typeof layout !== 'object') {
+    return false;
+  }
+
+  if (!SUPPORTED_LAYOUTS.includes(layout.type)) {
+    return false;
+  }
+
+  if (layout.columns === undefined) {
+    return true;
+  }
+
+  return Number.isInteger(layout.columns) && layout.columns >= 1 && layout.columns <= 4;
+};
+
 const featureSchema = new mongoose.Schema({
-  pageId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'AgentPage', 
+  pageId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AgentPage',
     required: true,
-    index: true
+    index: true,
   },
-  name: { 
-    type: String, 
-    required: true 
+  name: {
+    type: String,
+    required: true,
   },
-  description: { 
-    type: String, 
-    default: '' 
+  description: {
+    type: String,
+    default: '',
   },
-  type: { 
-    type: String, 
+  // Legacy compatibility (older code paths still reference feature.type/uiConfig).
+  type: {
+    type: String,
     enum: ['todo', 'notes', 'advice', 'tracker', 'insights', 'ideas', 'research-tracker', 'custom'],
-    required: true 
+    default: 'custom',
   },
-  // Feature category: 'functional' or 'chat'
+  uiConfig: {
+    layout: { type: String },
+    components: { type: [String], default: [] },
+    actions: { type: [String], default: [] },
+  },
+  pageBlueprint: {
+    featureName: { type: String, default: '' },
+    description: { type: String, default: '' },
+    layout: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+      default: { type: 'vertical' },
+      validate: {
+        validator: validateLayout,
+        message: 'layout must be vertical|grid|sidebar|dashboard (string or object with { type, columns? })',
+      },
+    },
+    sections: {
+      type: [sectionSchema],
+      default: [],
+      validate: {
+        validator: (sections) => Array.isArray(sections) && sections.length > 0,
+        message: 'pageBlueprint.sections must contain at least one section',
+      },
+    },
+    dataModel: { type: [String], default: [] },
+    aiCapabilities: { type: [String], default: [] },
+  },
   category: {
     type: String,
-    enum: ['functional', 'chat'],
-    default: 'functional'
+    default: 'functional',
   },
-  // UI configuration - defines how the feature renders
-  uiConfig: {
-    layout: { 
-      type: String, 
-      enum: ['crud', 'input-output', 'list', 'dashboard', 'custom'],
-      default: 'custom'
+  agentIds: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Agent',
     },
-    components: { 
-      type: [String], 
-      default: [] // e.g., ['list', 'form', 'insights']
-    },
-    actions: { 
-      type: [String], 
-      default: [] // e.g., ['add', 'edit', 'delete', 'insights']
-    }
+  ],
+  originalInput: {
+    type: String,
+    required: true,
   },
-  // Feature-specific configuration
-  config: { 
-    type: Object, 
-    default: {} 
+  createdAt: {
+    type: Date,
+    default: Date.now,
   },
-  // Associated agents for this feature
-  agentIds: [{ 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Agent' 
-  }],
-  // Original user input that created this feature
-  originalInput: { 
-    type: String, 
-    required: true 
+  updatedAt: {
+    type: Date,
+    default: Date.now,
   },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
-  }
 });
 
-// Index for efficient queries
 featureSchema.index({ pageId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Feature', featureSchema);

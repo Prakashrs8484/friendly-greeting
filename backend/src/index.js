@@ -15,9 +15,12 @@ const planningRoutes = require('./modules/finance/planning.routes');
 const aiActionRoutes = require('./modules/finance/aiAction.routes');
 const notesRoutes = require('./modules/notes/notes.routes');
 const nutritionRoutes = require('./modules/nutrition/nutrition.routes');
+const mcpNutritionRoutes = require('./modules/mcp/nutrition/nutrition.routes');
+const mcpFitnessRoutes = require('./modules/mcp/fitness/fitness.routes');
 const healthRoutes = require('./modules/health/health.routes');
 const lifestyleRoutes = require('./modules/lifestyle/lifestyle.routes');
 const agentPagesRoutes = require('./modules/agentPages/agentPage.routes');
+const fitnessRoutes = require('./modules/fitness/fitness.routes');
 
 // ========== APP SETUP ==========
 const app = express();
@@ -40,8 +43,11 @@ app.use('/api/notes', systemRoutes.ttsRoutes); // TTS routes under /api/notes
 app.use('/api/finance', financeRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/nutrition', nutritionRoutes);
+app.use('/api/mcp/nutrition', mcpNutritionRoutes);
+app.use('/api/mcp/fitness', mcpFitnessRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/lifestyle', lifestyleRoutes);
+app.use('/api/fitness', fitnessRoutes);
 app.use('/api/agent-pages', agentPagesRoutes);
 
 // Backward compatibility routes (maintain existing API paths)
@@ -63,5 +69,11 @@ app.use(errorHandler);
 
 app.get('/', (req, res) => res.json({ status: 'NeuraDesk backend (Option 1) running' }));
 
-const PORT = process.env.PORT || 4002;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Export app for testing
+module.exports = app;
+
+// Only start the server if this file is run directly (not imported for testing)
+if (require.main === module) {
+  const PORT = process.env.PORT || 4002;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}

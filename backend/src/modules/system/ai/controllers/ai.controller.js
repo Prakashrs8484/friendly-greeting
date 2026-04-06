@@ -5,6 +5,8 @@ const NutritionContext = require('../../../nutrition/models/NutritionContext');
 const LifestyleContext = require('../../../lifestyle/models/LifestyleContext');
 const NotesContext = require('../../../notes/models/NotesContext');
 const groq = require('../../services/groq.service');
+const { analyzeNutritionText } = require('../../../mcp/nutrition/services/nutritionAnalyzer.service');
+const { invokeNutritionAnalyzeViaMcp } = require('../services/nutritionMcpClient.service');
 
 async function callGroqSystem(systemPrompt, userMessage) {
   try {
@@ -94,13 +96,46 @@ exports.nutritionChat = async (req, res) => {
     const { message } = req.body;
     const context = await NutritionContext.findOne({ userId: req.user._id });
 
+    if (typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ message: 'message is required and must be a non-empty string' });
+    }
+
+    let nutritionAnalysis = null;
+    let analysisSource = 'none';
+    const useMcpNutrition = process.env.USE_MCP_NUTRITION !== 'false';
+
+    if (useMcpNutrition) {
+      try {
+        nutritionAnalysis = await invokeNutritionAnalyzeViaMcp(message.trim(), {
+          timeoutMs: Number(process.env.NUTRITION_MCP_TIMEOUT_MS) || 9000
+        });
+        analysisSource = 'mcp';
+      } catch (mcpError) {
+        console.warn('[nutritionChat] MCP call failed, using deterministic fallback:', mcpError.message);
+      }
+    }
+
+    if (!nutritionAnalysis) {
+      nutritionAnalysis = analyzeNutritionText(message.trim());
+      analysisSource = 'fallback';
+    }
+
     const systemPrompt = `
-You are NeuraDesk Nutrition Agent. Use context:
+You are NeuraDesk Nutrition Agent. Use context and deterministic nutrition analysis.
+Never recalculate macros from scratch. Use the deterministic totals and item values provided below.
 ${JSON.stringify(context || {}, null, 2)}
+
+Nutrition analysis (${analysisSource}):
+${JSON.stringify(nutritionAnalysis, null, 2)}
     `;
 
     const reply = await callGroqSystem(systemPrompt, message);
-    return res.json({ reply });
+    return res.json({
+      reply,
+      nutritionAnalysis,
+      mcpUsed: analysisSource === 'mcp',
+      analysisSource
+    });
 
   } catch (err) {
     console.log("AI ERROR (Nutrition):", err);

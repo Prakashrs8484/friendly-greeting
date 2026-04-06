@@ -2,7 +2,7 @@ const {
   generateFeature,
   getPageFeatures,
   deleteFeature
-} = require('../services/featureGeneration.service');
+} = require('../services/featureGeneration-v2.service');
 
 const {
   handleFeatureEvent
@@ -37,31 +37,38 @@ exports.createFeature = async (req, res) => {
       });
     }
 
-    // Generate feature and agents
+    // Generate feature using schema-driven approach
     console.log('[Feature Controller] [DB WRITE] Generating feature...');
-    const feature = await generateFeature(pageId, req.user._id, userInput.trim());
-    console.log('[Feature Controller] [DB WRITE] Feature created successfully:', feature._id, 'Type:', feature.type, 'Agents:', feature.agentIds?.length || 0);
+    const result = await generateFeature(pageId, req.user._id, userInput.trim());
+    const feature = result.feature;
+    console.log('[Feature Controller] [DB WRITE] Feature created successfully:', feature._id, 'Name:', feature.name);
 
-    // Trigger feature event via orchestrator
+    // Trigger feature event via orchestrator (simplified for schema-driven)
     console.log('[Feature Controller] [FEATURE EVENT] Triggering feature created event...');
-    await handleFeatureEvent(pageId, feature._id, 'created', { type: feature.type, agentIds: feature.agentIds });
-    console.log('[Feature Controller] [FEATURE EVENT] Feature event handled successfully');
+    try {
+      await handleFeatureEvent(pageId, feature._id, 'created', { 
+        name: feature.name, 
+        agentIds: feature.agentIds,
+        pageBlueprint: feature.pageBlueprint
+      });
+      console.log('[Feature Controller] [FEATURE EVENT] Feature event handled successfully');
+    } catch (eventError) {
+      console.warn('[Feature Controller] Feature event failed:', eventError.message);
+      // Don't fail the request if event fails
+    }
 
-    // Return feature in format expected by frontend
+    // Return feature with schema-driven structure
     return res.status(201).json({
       success: true,
       featureId: feature._id,
-      message: 'Feature created successfully',
+      message: result.message,
       feature: {
         _id: feature._id,
         pageId: feature.pageId,
         name: feature.name,
         description: feature.description,
-        type: feature.type,
-        uiConfig: feature.uiConfig,
-        config: feature.config,
-        featurePlan: feature.config?.featurePlan || null,
-        agentIds: feature.agentIds,
+        pageBlueprint: feature.pageBlueprint,
+        agentIds: feature.agentIds || [],
         originalInput: feature.originalInput,
         createdAt: feature.createdAt,
         updatedAt: feature.updatedAt
@@ -110,10 +117,7 @@ exports.getPageFeatures = async (req, res) => {
         pageId: f.pageId,
         name: f.name,
         description: f.description,
-        type: f.type,
-        uiConfig: f.uiConfig,
-        config: f.config,
-        featurePlan: f.config?.featurePlan || null,
+        pageBlueprint: f.pageBlueprint,
         agentIds: f.agentIds || [],
         originalInput: f.originalInput,
         createdAt: f.createdAt,
@@ -161,14 +165,9 @@ exports.deleteFeature = async (req, res) => {
       });
     }
 
-    // Default: delete feature-tied agents to avoid ghost agents/orphaned threads
-    const deleteAgents = req.query.deleteAgents !== 'false';
-    
-    console.log('[Feature Controller] [DB WRITE] Deleting feature:', featureId, 'Delete agents:', deleteAgents);
-    await deleteFeature(featureId, deleteAgents);
+    console.log('[Feature Controller] [DB WRITE] Deleting feature:', featureId);
+    await deleteFeature(featureId);
     console.log('[Feature Controller] [DB WRITE] Feature deleted successfully');
-
-    // Note: deletion cascade already removes feature-linked messages/data.
 
     return res.json({ 
       success: true,
