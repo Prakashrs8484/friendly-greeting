@@ -11,11 +11,13 @@ router.post('/', auth, agentPageController.createAgentPage);
 
 // Feature routes (auto-generated features) - MUST come before :pageId route
 router.post('/:pageId/features', auth, featureController.createFeature);
+router.post('/:pageId/features/materialize-plan', auth, featureController.materializeFeatureFromPlan);
 router.get('/:pageId/features', auth, featureController.getPageFeatures);
 router.delete('/:pageId/features/:featureId', auth, featureController.deleteFeature);
 
 // Feature plan routes
 router.get('/:pageId/feature-plans', auth, featurePlanController.getPageFeaturePlans);
+router.post('/:pageId/feature-plans/generate', auth, featurePlanController.generateFeaturePlan);
 router.post('/:pageId/feature-plans', auth, featurePlanController.createFeaturePlan);
 
 // Feature data routes
@@ -29,6 +31,9 @@ router.get('/:pageId/agents', auth, agentController.getAgents);
 router.post('/:pageId/agents', auth, agentController.createAgent);
 
 // Agent execution routes
+router.put('/:pageId/agents/:agentId', auth, agentController.updateAgent);
+
+// Agent execution routes
 router.post('/:pageId/agents/:agentId/execute', auth, agentController.executeAgent);
 router.get('/:pageId/agents/:agentId/history', auth, agentController.getExecutionHistory);
 
@@ -36,6 +41,9 @@ router.get('/:pageId/agents/:agentId/history', auth, agentController.getExecutio
 router.get('/:pageId/messages', auth, agentController.getPageMessages);
 router.delete('/:pageId/messages', auth, agentController.clearPageMessages);
 router.delete('/:pageId/agents/:agentId/messages', auth, agentController.clearAgentMessages);
+
+// Aggregate workspace endpoint - returns all workspace data in one call (must come before :pageId catch-all)
+router.get('/:pageId/workspace', auth, agentPageController.getWorkspaceData);
 
 // Agent Page CRUD routes (catch-all :pageId routes come last)
 router.get('/:pageId', auth, agentPageController.getAgentPage);

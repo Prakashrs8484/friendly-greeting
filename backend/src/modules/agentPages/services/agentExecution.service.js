@@ -1,4 +1,5 @@
 const groq = require('../../system/services/groq.service');
+const toolProvider = require('./toolProvider.service');
 
 /**
  * Get conversation stage from agent memory
@@ -30,38 +31,61 @@ const updateAgentStage = async (agentId, stage) => {
  * Execute an agent with AI-driven response generation using LLM (Groq)
  * 
  * This function:
- * 1. Builds a system prompt with agent role, tone, and user context
- * 2. Prepares conversation history for context
- * 3. Calls Groq LLM API to generate contextual, AI-driven responses
- * 4. Returns the LLM-generated response
+ * 1. Builds a system prompt with agent role, tone, capabilities, and user context
+ * 2. Maps agent config (creativity, verbosity, memoryEnabled) to runtime parameters
+ * 3. Prepares conversation history for context
+ * 4. Calls Groq LLM API to generate contextual, AI-driven responses
+ * 5. Returns the LLM-generated response with execution metadata
  * 
- * @param {Object} agent - The agent object with name, role, tone, description
+ * @param {Object} agent - The agent object with config (role, tone, creativity, verbosity, allowedTools)
  * @param {string} userInput - User's message
  * @param {Array} agentHistory - Agent's previous messages [{ role, content, createdAt }]
  * @param {Object} pageContext - { pageLevelMessages, featureSummaries, featureFacts }
- * @returns {Promise<string>} AI-generated response from LLM
+ * @returns {Promise<Object>} { response: string, metadata: { tools: [...], tokens: number, latency: number } }
  */
 async function executeAgent(agent, userInput, agentHistory = [], pageContext = {}) {
+  const executionStart = Date.now();
+  const executionMetadata = {
+    tools: [],
+    tokens: 0,
+    latency: 0,
+    source: 'llm'
+  };
+
   if (!userInput || userInput.trim() === '') {
     userInput = "Hello";
   }
 
   const agentName = agent.name || "Agent";
-  const role = agent.config?.role || agent.role || "assistant";
-  const tone = agent.config?.tone || agent.tone || "neutral";
   const agentDescription = agent.description || '';
   
-  const featureSummaries = pageContext.featureSummaries || [];
-  const pageLevelMessages = pageContext.pageLevelMessages || [];
-  const featureFacts = pageContext.featureFacts || {};
+  console.log('[Agent Execution] Agent:', agentName, 'Config:', agent.config);
 
-  console.log('[Agent Execution - LLM Driven] Agent:', agentName, 'Role:', role, 'Tone:', tone);
+  // Build runtime parameters from agent config
+  const runtimeParams = toolProvider.buildRuntimeParams(agent.config);
+  
+  // Build AI system prompt with agent config, tools, and context
+  const systemPrompt = toolProvider.buildSystemPrompt(agent.config, {
+    description: agentDescription,
+    ...pageContext
+  });
 
-  // Build AI system prompt with context
-  const systemPrompt = buildSystemPrompt(agentName, role, tone, agentDescription, pageContext);
+  console.log('[Agent Execution] Runtime params:', { 
+    temperature: runtimeParams.temperature,
+    max_tokens: runtimeParams.max_tokens,
+    allowedProviders: runtimeParams.allowedProviders
+  });
 
-  // Generate LLM response with conversation history
-  return await callLLM(agent, userInput, agentHistory, systemPrompt);
+  // Generate LLM response with conversation history and config-based parameters
+  const result = await callLLM(agent, userInput, agentHistory, systemPrompt, runtimeParams);
+  
+  executionMetadata.latency = Date.now() - executionStart;
+  
+  return {
+    response: result.response,
+    metadata: executionMetadata,
+    newStage: null // Optional: Can be updated by specialized agents
+  };
 }
 
 /**
@@ -128,17 +152,17 @@ Guidelines:
 }
 
 /**
- * Call Groq LLM API to generate response
+ * Call Groq LLM API to generate response with config-based runtime parameters
  */
-async function callLLM(agent, userInput, agentHistory, systemPrompt) {
+async function callLLM(agent, userInput, agentHistory, systemPrompt, runtimeParams) {
   try {
     console.log('[LLM] Generating response for:', agent.name);
 
     // Build message history for context window
     const messages = [];
     
-    // Include recent history (max 10 messages) for context
-    if (agentHistory && agentHistory.length > 0) {
+    // Include recent history (respecting memory settings) for context
+    if (runtimeParams.includeAgentMemory && agentHistory && agentHistory.length > 0) {
       const recentHistory = agentHistory.slice(-10);
       for (const msg of recentHistory) {
         messages.push({
@@ -154,33 +178,44 @@ async function callLLM(agent, userInput, agentHistory, systemPrompt) {
       content: userInput
     });
 
-    // Call Groq API with system prompt
+    // Call Groq API with config-driven runtime parameters
     const response = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages
       ],
-      temperature: 0.7,  // Balanced creativity and consistency
-      max_tokens: 500,   // Reasonable response length
-      top_p: 0.95
+      temperature: runtimeParams.temperature || 0.7,
+      max_tokens: runtimeParams.max_tokens || 500,
+      top_p: runtimeParams.top_p || 0.95
     });
 
     const generatedResponse = response.choices[0]?.message?.content?.trim();
 
     if (!generatedResponse) {
       console.warn('[LLM] Empty response received');
-      return `I apologize, but I'm having trouble generating a response. Please try again.`;
+      return {
+        response: `I apologize, but I'm having trouble generating a response. Please try again.`,
+        tokens: 0
+      };
     }
 
     console.log('[LLM] Response generated successfully:', generatedResponse.substring(0, 80));
-    return generatedResponse;
+    
+    // Return response with token estimate
+    return {
+      response: generatedResponse,
+      tokens: response.usage?.completion_tokens || 0
+    };
 
   } catch (error) {
     console.error('[LLM] Error calling Groq API:', error.message);
     
     // Fallback response if LLM fails
-    return `I'm ${agent.name}, your ${agent.config?.role || 'assistant'}. I'm currently unable to respond. Please try again in a moment.`;
+    return {
+      response: `I'm ${agent.name}, your ${agent.config?.role || 'assistant'}. I'm currently unable to respond. Please try again in a moment.`,
+      tokens: 0
+    };
   }
 }
 

@@ -21,6 +21,11 @@ const SUPPORTED_COMPONENTS = [
   'streakTracker',
   'metricBoard',
   'insightPanel',
+  'recommendationCards',
+  'nextStepPlanner',
+  'anomalyAlerts',
+  'semanticFilterRail',
+  'decisionPlaybook',
 ];
 
 const VALID_FIELD_TYPES = ['text', 'number', 'date', 'time', 'select', 'textarea'];
@@ -114,8 +119,9 @@ CRITICAL RULES:
 3. Choose components based on user intent and data shape.
 4. Avoid repetitive form+list structure unless user explicitly asks for simple CRUD input flow.
 5. Prefer richer composition (analytics, progress, comparison, planning, and insights) when applicable.
-6. layout must be an object: { "type": "grid|dashboard|vertical|sidebar", "columns"?: 1-4 }.
-7. Each section can include:
+6. Every feature must include ONE primary AI section selected by user intent (not always insightPanel).
+7. layout must be an object: { "type": "grid|dashboard|vertical|sidebar", "columns"?: 1-4 }.
+8. Each section can include:
    - variant: "compact" | "detailed" | "minimal"
    - fields: array (for form-like structures)
    - props: object (component-specific configuration, sample data, labels, defaults)
@@ -140,6 +146,11 @@ SUPPORTED COMPONENTS:
 - streakTracker
 - metricBoard
 - insightPanel
+- recommendationCards
+- nextStepPlanner
+- anomalyAlerts
+- semanticFilterRail
+- decisionPlaybook
 
 OUTPUT SCHEMA:
 {
@@ -168,7 +179,10 @@ INTENT-TO-COMPOSITION GUIDANCE:
 - Workout planner -> calendar + table + progressTracker
 - Budget tracker -> table + chart-pie + kpi-grid
 - Habit tracker -> streakTracker + chart-line
-- Decision tool -> comparisonTable + insightPanel
+- Decision tool -> comparisonTable + decisionPlaybook
+- Planning/project goals -> timeline + progressTracker + nextStepPlanner
+- Analytics/operations monitoring -> kpi-grid + chart-line + anomalyAlerts
+- Research/knowledge management -> table/list + semanticFilterRail + recommendationCards
 
 When form/list is used, pair it with richer visual or analytical sections if the use case needs tracking, trends, comparisons, or planning.`;
 }
@@ -209,9 +223,96 @@ function normalizeLayout(layout) {
   return { type: 'vertical' };
 }
 
+function classifyIntent(input) {
+  if (/decision|compare|comparison|choice|options|tradeoff/.test(input)) {
+    return 'decision';
+  }
+  if (/plan|planning|roadmap|milestone|goal|strategy|schedule|project/.test(input)) {
+    return 'planning';
+  }
+  if (/monitor|anomaly|alert|kpi|metrics|analytics|dashboard|operations|trend/.test(input)) {
+    return 'analysis';
+  }
+  if (/research|knowledge|notes|content|library|learn|documentation/.test(input)) {
+    return 'knowledge';
+  }
+  if (/habit|routine|streak|tracker|track|fitness|budget|expense|finance/.test(input)) {
+    return 'tracking';
+  }
+  return 'general';
+}
+
+function getAiComponentForIntent(intent) {
+  switch (intent) {
+    case 'decision':
+      return 'decisionPlaybook';
+    case 'planning':
+      return 'nextStepPlanner';
+    case 'analysis':
+      return 'anomalyAlerts';
+    case 'knowledge':
+      return 'semanticFilterRail';
+    case 'tracking':
+      return 'recommendationCards';
+    default:
+      return 'insightPanel';
+  }
+}
+
+function ensureAiSection(sections, aiComponent) {
+  const aiComponents = [
+    'insightPanel',
+    'recommendationCards',
+    'nextStepPlanner',
+    'anomalyAlerts',
+    'semanticFilterRail',
+    'decisionPlaybook',
+  ];
+
+  const nonAiSections = sections.filter((section) => !aiComponents.includes(section.component));
+  const existingPrimary = sections.find((section) => aiComponents.includes(section.component));
+
+  const selected = existingPrimary && existingPrimary.component === aiComponent
+    ? existingPrimary
+    : {
+        id: nextSectionId(nonAiSections),
+        component: aiComponent,
+        variant: 'detailed',
+        label: 'AI Copilot',
+        description: 'AI guidance tailored to this feature context',
+        props: {
+          actionLabel: 'Generate AI Guidance',
+          loadingLabel: 'Analyzing workspace with AI...',
+        },
+      };
+
+  return [...nonAiSections, selected];
+}
+
+function ensureAICapabilityForComponent(aiCapabilities, aiComponent) {
+  const capabilityMap = {
+    insightPanel: ['general insights', 'summaries'],
+    recommendationCards: ['recommendations', 'prioritization'],
+    nextStepPlanner: ['next-step suggestions', 'plan sequencing'],
+    anomalyAlerts: ['pattern detection', 'anomaly alerts'],
+    semanticFilterRail: ['semantic clustering', 'context filters'],
+    decisionPlaybook: ['decision support', 'tradeoff analysis'],
+  };
+
+  const needed = capabilityMap[aiComponent] || ['general insights'];
+  for (const capability of needed) {
+    if (!aiCapabilities.includes(capability)) {
+      aiCapabilities.push(capability);
+    }
+  }
+}
+
 function applyIntentCompositionRules(schema, userInput) {
   const input = String(userInput || '').toLowerCase();
-  const sections = Array.isArray(schema.sections) ? schema.sections : [];
+  let sections = Array.isArray(schema.sections) ? schema.sections : [];
+  const aiCapabilities = Array.isArray(schema.aiCapabilities) ? schema.aiCapabilities : [];
+  const intent = classifyIntent(input);
+  const aiComponent = getAiComponentForIntent(intent);
 
   schema.layout = normalizeLayout(schema.layout);
 
@@ -261,23 +362,67 @@ function applyIntentCompositionRules(schema, userInput) {
       label: 'Option Comparison',
       description: 'Compare alternatives side-by-side',
     });
-    ensureSection(sections, 'insightPanel', {
-      label: 'Decision Insights',
+    ensureSection(sections, 'decisionPlaybook', {
+      label: 'Decision Playbook',
       description: 'AI-generated insights and tradeoff guidance',
     });
   }
 
-  const uniqueComponents = new Set(sections.map((section) => section.component));
+  if (/plan|planning|roadmap|milestone|goal|strategy|schedule|project/.test(input)) {
+    ensureSection(sections, 'timeline', {
+      label: 'Plan Timeline',
+      description: 'Track milestones and schedule flow',
+    });
+    ensureSection(sections, 'nextStepPlanner', {
+      label: 'Next Step Planner',
+      description: 'AI-prioritized action sequence based on progress',
+    });
+  }
+
+  if (/monitor|anomaly|alert|kpi|metrics|analytics|dashboard|operations|trend/.test(input)) {
+    ensureSection(sections, 'kpi-grid', {
+      label: 'Operational KPIs',
+      description: 'Key metrics and status indicators',
+    });
+    ensureSection(sections, 'anomalyAlerts', {
+      label: 'Anomaly Alerts',
+      description: 'AI-detected outliers and regressions',
+    });
+  }
+
+  if (/research|knowledge|notes|content|library|learn|documentation/.test(input)) {
+    ensureSection(sections, 'semanticFilterRail', {
+      label: 'Semantic Filter Rail',
+      description: 'AI-suggested clusters to filter and explore information',
+    });
+  }
+
+  sections = ensureAiSection(sections, aiComponent);
+
+  const aiComponents = new Set([
+    'insightPanel',
+    'recommendationCards',
+    'nextStepPlanner',
+    'anomalyAlerts',
+    'semanticFilterRail',
+    'decisionPlaybook',
+  ]);
+  const nonAiSections = sections.filter((section) => !aiComponents.has(section.component));
+  const uniqueComponents = new Set(nonAiSections.map((section) => section.component));
   const onlySimpleFlow =
     uniqueComponents.size > 0 &&
     [...uniqueComponents].every((component) => component === 'form' || component === 'list');
 
-  if (onlySimpleFlow && sections.length <= 2) {
-    ensureSection(sections, 'insightPanel', {
+  if (onlySimpleFlow && nonAiSections.length <= 2) {
+    sections = ensureAiSection(sections, 'recommendationCards');
+    ensureSection(sections, 'recommendationCards', {
       label: 'Insights',
       description: 'AI recommendations based on your entries',
     });
   }
+
+  const finalAiSection = sections.find((section) => aiComponents.has(section.component));
+  ensureAICapabilityForComponent(aiCapabilities, finalAiSection?.component || aiComponent);
 
   schema.sections = sections.map((section, index) => ({
     ...section,
@@ -288,6 +433,8 @@ function applyIntentCompositionRules(schema, userInput) {
     fields: normalizeFields(section.fields),
     props: section.props && typeof section.props === 'object' ? section.props : {},
   }));
+
+  schema.aiCapabilities = aiCapabilities;
 
   return schema;
 }

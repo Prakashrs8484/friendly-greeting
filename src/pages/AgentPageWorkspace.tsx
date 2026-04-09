@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Settings, Bot, Send, Loader2, Sparkles, ToggleLeft, ToggleRight, Wand2, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Bot, Send, Loader2, Sparkles, ToggleLeft, ToggleRight, Wand2, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,23 +26,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  getAgentPage,
+  getWorkspaceData,
   createAgent,
   executeAgent,
   getPageMessages,
   clearAgentMessages,
-  clearPageMessages,
   createFeature,
-  getPageFeatures,
   deleteFeature,
+  updateAgent,
   type AgentPage,
   type Agent,
   type CreateAgentPayload,
-  type PageMessage,
   type Feature,
 } from "@/lib/agentPageApi";
 import { DynamicFeatureRenderer } from "@/components/features/DynamicFeatureRenderer";
 import { toast } from "@/hooks/use-toast";
+import { AgentTuningDialog } from "@/components/AgentTuningDialog";
+import { PageSettingsDialog } from "@/components/PageSettingsDialog";
 
 interface ChatMessage {
   role: "user" | "agent";
@@ -55,6 +56,7 @@ const TONES = ["Formal", "Friendly", "Motivational", "Neutral"];
 const AgentPageWorkspace = () => {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState<AgentPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -78,74 +80,87 @@ const AgentPageWorkspace = () => {
   const [creatingFeature, setCreatingFeature] = useState(false);
   const [showFeatureInput, setShowFeatureInput] = useState(false);
 
+  const workspaceQuery = useQuery({
+    queryKey: ["agent-workspace", pageId],
+    enabled: Boolean(pageId),
+    queryFn: async () => {
+      if (!pageId) throw new Error("Missing page id");
+      const response = await getWorkspaceData(pageId);
+      return response.data;
+    },
+  });
 
-  // Load page data
+  const messagesQuery = useQuery({
+    queryKey: ["agent-messages", pageId, selectedAgent?._id],
+    enabled: Boolean(pageId && page && selectedAgent),
+    queryFn: async () => {
+      if (!pageId || !selectedAgent) return [];
+      const response = await getPageMessages(pageId, selectedAgent._id);
+      return response.messages || [];
+    },
+  });
+
+  // Load page + features from aggregate workspace endpoint
   useEffect(() => {
-    if (!pageId) return;
-    const load = async () => {
-      try {
-        const data = await getAgentPage(pageId);
-        setPage(data);
-        if (data.agents?.length > 0) setSelectedAgent(data.agents[0]);
+    if (!workspaceQuery.data) return;
+    const { page: workspacePage, agents = [], features: workspaceFeatures = [] } = workspaceQuery.data;
 
-        // Load existing features
-        try {
-          const response = await getPageFeatures(pageId);
-          // Handle both old format (direct array) and new format (wrapped response)
-          const pageFeatures = response.features || response || [];
-          const normalized = Array.isArray(pageFeatures)
-            ? pageFeatures.map((f) => ({
-                ...f,
-                featurePlan: f.featurePlan || (f.config as { featurePlan?: unknown } | undefined)?.featurePlan || null
-              }))
-            : [];
-          setFeatures(normalized);
-        } catch (err: any) {
-          console.error("[Feature Loading] Error:", err);
-          // Don't show error toast for loading failures, just log
-          setFeatures([]);
-        }
-      } catch {
-        toast({ title: "Failed to load workspace", variant: "destructive" });
-      } finally {
-        setLoading(false);
+    setPage((prev) => ({
+      ...workspacePage,
+      agents,
+      // Keep existing values if already available locally and not in workspace payload
+      icon: workspacePage.icon || prev?.icon || "🧠",
+    }));
+
+    const normalized = Array.isArray(workspaceFeatures)
+      ? workspaceFeatures.map((f) => ({
+          ...f,
+          featurePlan: f.featurePlan || null,
+        }))
+      : [];
+    setFeatures(normalized);
+
+    setSelectedAgent((prev) => {
+      if (prev?._id) {
+        const updatedSelected = agents.find((a) => a._id === prev._id);
+        if (updatedSelected) return updatedSelected;
       }
-    };
-    load();
-  }, [pageId]);
+      return agents[0] || null;
+    });
 
-  // Load messages for the selected agent (per-agent chat history) - FRONTEND SYNC WITH DB
+    setLoading(false);
+  }, [workspaceQuery.data]);
+
   useEffect(() => {
-    if (!pageId || !page) return;
-    const loadMessages = async () => {
-      console.log('[Frontend] [DB SYNC] Loading messages from MongoDB:', { pageId, agentId: selectedAgent?._id });
-      try {
-        // Load only the selected agent's chat thread (or all if no agent selected)
-        const response = await getPageMessages(pageId, selectedAgent?._id);
-        const pageMessages = response.messages || [];
-        console.log('[Frontend] [DB SYNC] Loaded', pageMessages.length, 'messages from DB');
-        // Convert PageMessage[] to ChatMessage[]
-        const chatMessages: ChatMessage[] = pageMessages.map((msg) => {
-          // Find agent name if it's an agent message
-          const agent = page.agents?.find((a) => a._id === msg.agentId);
-          const timestamp = msg.createdAt || msg.timestamp;
-          return {
-            role: msg.role,
-            content: msg.content,
-            agentName: msg.role === "agent" ? (agent?.name || "Agent") : undefined,
-            timestamp: timestamp ? new Date(timestamp) : new Date(),
-          };
-        });
-        setMessages(chatMessages);
-        console.log('[Frontend] [DB SYNC] Messages synced to UI:', chatMessages.length);
-      } catch (err) {
-        // If loading messages fails, just start with empty messages
-        console.error('[Frontend] [DB SYNC] Failed to load agent messages:', err);
-        setMessages([]);
-      }
-    };
-    loadMessages();
-  }, [pageId, selectedAgent?._id, page]);
+    if (!workspaceQuery.isError) return;
+    toast({ title: "Failed to load workspace", variant: "destructive" });
+    setLoading(false);
+  }, [workspaceQuery.isError]);
+
+  useEffect(() => {
+    if (!messagesQuery.data) {
+      setMessages([]);
+      return;
+    }
+
+    const chatMessages: ChatMessage[] = messagesQuery.data.map((msg) => {
+      const agent = page?.agents?.find((candidate) => candidate._id === msg.agentId);
+      const timestamp = msg.createdAt || msg.timestamp;
+      return {
+        role: msg.role,
+        content: msg.content,
+        agentName: msg.role === "agent" ? (agent?.name || "Agent") : undefined,
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+      };
+    });
+
+    setMessages(chatMessages);
+  }, [messagesQuery.data, page?.agents]);
+
+  useEffect(() => {
+    if (!messagesQuery.isError) return;
+    setMessages([]);
+  }, [messagesQuery.isError]);
 
   const handleCreateAgent = async () => {
     if (!pageId || !agentName.trim()) return;
@@ -167,6 +182,7 @@ const AgentPageWorkspace = () => {
         prev ? { ...prev, agents: [...(prev.agents || []), agent] } : prev
       );
       setSelectedAgent(agent);
+      queryClient.invalidateQueries({ queryKey: ["agent-workspace", pageId] });
       setCreateOpen(false);
       resetForm();
       toast({ title: `Agent "${agent.name}" created!` });
@@ -186,52 +202,101 @@ const AgentPageWorkspace = () => {
     setMemoryEnabled(false);
   };
 
+  const handleTuneAgent = async (config: Agent['config']) => {
+    if (!pageId || !selectedAgent) return;
+
+    try {
+      const updatedAgent = await updateAgent(pageId, selectedAgent._id, { config });
+      setSelectedAgent(updatedAgent);
+      setPage((prev) =>
+        prev
+          ? {
+              ...prev,
+              agents: prev.agents?.map((a) => (a._id === updatedAgent._id ? updatedAgent : a)) || [],
+            }
+          : prev
+      );
+      queryClient.invalidateQueries({ queryKey: ["agent-workspace", pageId] });
+      toast({ title: `Agent "${selectedAgent.name}" tuned successfully` });
+    } catch (err) {
+      console.error("[Agent Tuning] Error:", err);
+      toast({ title: "Failed to tune agent", variant: "destructive" });
+    }
+  };
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async (message: string) => {
+      if (!pageId || !selectedAgent) throw new Error("Missing agent context");
+      return executeAgent(pageId, selectedAgent._id, message);
+    },
+    onMutate: async (message: string) => {
+      const optimisticUserMessage: ChatMessage = {
+        role: "user",
+        content: message,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, optimisticUserMessage]);
+      setSending(true);
+      setInput("");
+      return { optimisticUserMessage };
+    },
+    onSuccess: async (response) => {
+      const agentReply = response.response;
+      const content = !agentReply || agentReply.trim() === ""
+        ? "Agent is active but returned no response."
+        : agentReply;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          content,
+          agentName: selectedAgent?.name,
+          timestamp: new Date(),
+        },
+      ]);
+
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-messages", pageId, selectedAgent?._id],
+      });
+    },
+    onError: () => {
+      setMessages((prev) => [
+        ...prev.slice(0, Math.max(0, prev.length - 1)),
+        {
+          role: "agent",
+          content: "Agent is active but returned no response.",
+          agentName: selectedAgent?.name,
+          timestamp: new Date(),
+        },
+      ]);
+      toast({ title: "Failed to send message", variant: "destructive" });
+    },
+    onSettled: () => {
+      setSending(false);
+    },
+  });
+
+  const clearChatMutation = useMutation({
+    mutationFn: async () => {
+      if (!pageId || !selectedAgent) throw new Error("Missing agent context");
+      return clearAgentMessages(pageId, selectedAgent._id);
+    },
+    onSuccess: async () => {
+      setMessages([]);
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-messages", pageId, selectedAgent?._id],
+      });
+      toast({ title: "Chat history cleared" });
+    },
+    onError: () => {
+      toast({ title: "Failed to clear chat", variant: "destructive" });
+    },
+  });
+
   const handleSend = async () => {
     if (!input.trim() || !selectedAgent || !pageId) return;
-    const userMsg: ChatMessage = { role: "user", content: input.trim(), timestamp: new Date() };
-    // Optimistically add user message to UI
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setSending(true);
-    try {
-      // Backend saves user message (with agentId) and returns agent response (also saved with agentId)
-      const res = await executeAgent(pageId, selectedAgent._id, userMsg.content);
-      const agentReply = res.response;
-      const content = !agentReply || agentReply.trim() === '' ? "Agent is active but returned no response." : agentReply;
-      // Backend saves agent response, so we just update UI optimistically
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content, agentName: selectedAgent.name, timestamp: new Date() },
-      ]);
-      // Reload messages to ensure sync with DB (ensures consistency with MongoDB)
-      console.log('[Frontend] [DB SYNC] Reloading messages after send to sync with MongoDB...');
-      try {
-        const response = await getPageMessages(pageId, selectedAgent._id);
-        const pageMessages = response.messages || [];
-        console.log('[Frontend] [DB SYNC] Reloaded', pageMessages.length, 'messages from DB');
-        const chatMessages: ChatMessage[] = pageMessages.map((msg) => {
-          const agent = page?.agents?.find((a) => a._id === msg.agentId);
-          const timestamp = msg.createdAt || msg.timestamp;
-          return {
-            role: msg.role,
-            content: msg.content,
-            agentName: msg.role === "agent" ? (agent?.name || "Agent") : undefined,
-            timestamp: timestamp ? new Date(timestamp) : new Date(),
-          };
-        });
-        setMessages(chatMessages);
-        console.log('[Frontend] [DB SYNC] UI synced with MongoDB');
-      } catch (err) {
-        console.error('[Frontend] [DB SYNC] Failed to reload messages after send:', err);
-      }
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: "Agent is active but returned no response.", agentName: selectedAgent.name, timestamp: new Date() },
-      ]);
-    } finally {
-      setSending(false);
-    }
+    await sendMessageMutation.mutateAsync(input.trim());
   };
 
   const handleCreateFeature = async () => {
@@ -240,31 +305,28 @@ const AgentPageWorkspace = () => {
     try {
       const response = await createFeature(pageId, { input: featureInput.trim() });
       
-      // Handle both old format (direct feature) and new format (wrapped response)
-      const newFeature = response.feature || response;
-      const normalizedFeature = {
-        ...newFeature,
-        featurePlan: newFeature.featurePlan || (newFeature.config as { featurePlan?: unknown } | undefined)?.featurePlan || null
-      };
+      // Standardized response format: { success, featureId, feature, message }
+      const newFeature = response.feature;
       
-      if (!normalizedFeature || !normalizedFeature._id) {
+      if (!newFeature || !newFeature._id) {
         throw new Error("Invalid response from server");
       }
 
-      setFeatures((prev) => [normalizedFeature, ...prev]);
+      setFeatures((prev) => [newFeature, ...prev]);
       setFeatureInput("");
       setShowFeatureInput(false);
-      toast({ title: `Feature "${normalizedFeature.name}" created!` });
+      queryClient.invalidateQueries({ queryKey: ["agent-workspace", pageId] });
+      toast({ title: `Feature "${newFeature.name}" created!` });
       
       // Update page agents list if needed
-      if (page && normalizedFeature.agentIds && normalizedFeature.agentIds.length > 0) {
+      if (page && newFeature.agentIds && newFeature.agentIds.length > 0) {
         setPage((prev) =>
           prev
             ? {
                 ...prev,
                 agents: [
                   ...(prev.agents || []),
-                  ...normalizedFeature.agentIds.filter(
+                  ...newFeature.agentIds.filter(
                     (newAgent) => !prev.agents?.some((a) => a._id === newAgent._id)
                   ),
                 ],
@@ -326,6 +388,7 @@ const AgentPageWorkspace = () => {
 
     try {
       await deleteFeature(pageId, feature._id, true);
+      queryClient.invalidateQueries({ queryKey: ["agent-workspace", pageId] });
       toast({ title: `Feature "${feature.name}" deleted` });
     } catch (err) {
       console.error("[Feature Delete] Error:", err);
@@ -373,9 +436,20 @@ const AgentPageWorkspace = () => {
             <h1 className="text-xl font-semibold truncate">{page.name}</h1>
             <p className="text-sm text-muted-foreground truncate">{page.description}</p>
           </div>
-          <Button variant="ghost" size="icon" className="rounded-xl">
-            <Settings className="w-4 h-4" />
-          </Button>
+          <PageSettingsDialog
+            page={page}
+            onPageUpdated={(updatedPage) => {
+              setPage((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      ...updatedPage,
+                      agents: updatedPage.agents || prev.agents,
+                    }
+                  : updatedPage
+              );
+            }}
+          />
         </div>
 
         {/* Feature Creation Input */}
@@ -637,25 +711,23 @@ const AgentPageWorkspace = () => {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      if (!pageId || !selectedAgent?._id) return;
-                      if (!confirm(`Clear chat history with ${selectedAgent.name}? This cannot be undone.`)) return;
-                      try {
-                        await clearAgentMessages(pageId, selectedAgent._id);
-                        setMessages([]);
-                        toast({ title: "Chat history cleared" });
-                      } catch (err) {
-                        toast({ title: "Failed to clear chat", variant: "destructive" });
-                      }
-                    }}
-                    className="text-xs text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                    Clear Chat
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <AgentTuningDialog agent={selectedAgent} onConfigChange={handleTuneAgent} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (!pageId || !selectedAgent?._id) return;
+                        if (!confirm(`Clear chat history with ${selectedAgent.name}? This cannot be undone.`)) return;
+                        clearChatMutation.mutate();
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive"
+                      disabled={clearChatMutation.isPending}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      {clearChatMutation.isPending ? "Clearing..." : "Clear Chat"}
+                    </Button>
+                  </div>
                   <div className="ml-auto flex gap-1.5">
                     <Badge variant="outline" className="text-xs">
                       {selectedAgent.config?.tone || "Neutral"}

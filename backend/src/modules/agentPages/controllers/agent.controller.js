@@ -54,6 +54,46 @@ exports.createAgent = async (req, res) => {
 };
 
 /**
+ * Update agent configuration
+ */
+exports.updateAgent = async (req, res) => {
+  try {
+    const Agent = require('../models/agent.model');
+    const AgentPage = require('../models/agentPage.model');
+    const pageId = req.params.pageId;
+    const agentId = req.params.agentId;
+
+    // Verify page ownership
+    const page = await AgentPage.findOne({ _id: pageId, ownerId: req.user._id });
+    if (!page) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Verify agent exists and belongs to page
+    const agent = await Agent.findOne({ _id: agentId, pageId });
+    if (!agent) {
+      return res.status(404).json({ message: 'Agent not found' });
+    }
+
+    // Update agent with new data
+    if (req.body.name) agent.name = req.body.name;
+    if (req.body.description) agent.description = req.body.description;
+    if (req.body.config) {
+      agent.config = {
+        ...agent.config,
+        ...req.body.config,
+      };
+    }
+    if (req.body.memory !== undefined) agent.memory = req.body.memory;
+
+    const updatedAgent = await agent.save();
+    return res.json(updatedAgent);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
  * Execute an agent (only the selected agent responds)
  * CHAT → DB → AGENT FLOW:
  * 1. Save user message to DB (pageId + agentId)
@@ -75,10 +115,18 @@ exports.executeAgent = async (req, res) => {
   try {
     // Verify agent exists and is authorized
     const Agent = require('../models/agent.model');
+    const AgentPage = require('../models/agentPage.model');
     const agent = await Agent.findById(agentId);
     if (!agent) {
       console.error('[Agent Controller] Agent not found:', agentId);
       return res.status(404).json({ message: 'Agent not found' });
+    }
+
+    // IMPORTANT: Verify page belongs to user (ownership check for security)
+    const page = await AgentPage.findOne({ _id: pageId, ownerId: req.user._id });
+    if (!page) {
+      console.error('[Agent Controller] Page not found or unauthorized:', { pageId, userId: req.user._id });
+      return res.status(403).json({ message: 'Unauthorized or page not found' });
     }
 
     // Verify agent is allowed to respond (orchestrator check)
@@ -136,7 +184,16 @@ exports.executeAgent = async (req, res) => {
     const duration = Date.now() - startTime;
     console.log('[Agent Controller] ===== AGENT EXECUTION COMPLETE =====', `(${duration}ms)`);
 
-    return res.status(200).json({ response: generatedText });
+    // Return response with execution metadata for transparency
+    return res.status(200).json({ 
+      success: true,
+      response: generatedText,
+      metadata: executionResult.metadata || {
+        latency: duration,
+        source: 'llm',
+        tools: []
+      }
+    });
   } catch (err) {
     const duration = Date.now() - startTime;
     console.error('[Agent Controller] ===== AGENT EXECUTION ERROR =====');
@@ -152,6 +209,15 @@ exports.executeAgent = async (req, res) => {
  */
 exports.getExecutionHistory = async (req, res) => {
   try {
+    const AgentPage = require('../models/agentPage.model');
+    const pageId = req.params.pageId;
+
+    // Verify page belongs to user (ownership check)
+    const page = await AgentPage.findOne({ _id: pageId, ownerId: req.user._id });
+    if (!page) {
+      return res.status(403).json({ message: 'Unauthorized or page not found' });
+    }
+
     const history = await getExecutionHistory(req.params.agentId);
     return res.json(history);
   } catch (err) {

@@ -51,6 +51,12 @@ export interface CreateAgentPayload {
 export interface AgentExecutionResponse {
   response: string;
   executionId?: string;
+  metadata?: {
+    latency?: number;
+    source?: string;
+    tools?: string[];
+    tokens?: number;
+  };
 }
 
 // Agent Pages CRUD
@@ -84,6 +90,12 @@ export const getAgents = (pageId: string) =>
 export const createAgent = (pageId: string, data: CreateAgentPayload) =>
   apiRequest<Agent>(`/api/agent-pages/${pageId}/agents`, {
     method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const updateAgent = (pageId: string, agentId: string, data: Partial<CreateAgentPayload>) =>
+  apiRequest<Agent>(`/api/agent-pages/${pageId}/agents/${agentId}`, {
+    method: "PUT",
     body: JSON.stringify(data),
   });
 
@@ -158,6 +170,11 @@ export type SectionComponentType =
   | "streakTracker"
   | "metricBoard"
   | "insightPanel"
+  | "recommendationCards"
+  | "nextStepPlanner"
+  | "anomalyAlerts"
+  | "semanticFilterRail"
+  | "decisionPlaybook"
   | "chart"
   | "summaryCard";
 
@@ -212,6 +229,7 @@ export interface Feature {
   featurePlan?: FeaturePlan | null;
   agentIds: Agent[];
   originalInput: string;
+  schemaVersion?: string; // e.g., "1.0" for forward compatibility tracking
   createdAt: string;
   updatedAt: string;
 }
@@ -234,16 +252,28 @@ export interface CreateFeaturePayload {
   input: string;
 }
 
-export interface CreateFeatureResponse {
+export interface ApiResponse<T = unknown> {
   success: boolean;
+  message?: string;
+  data?: T;
+  [key: string]: unknown; // Allow endpoints to include additional metadata
+}
+
+export interface CreateFeatureResponse extends ApiResponse<{ featureId: string; feature: Feature }> {
   featureId: string;
-  message: string;
   feature: Feature;
 }
 
-export interface GetPageFeaturesResponse {
-  success: boolean;
+export interface GetPageFeaturesResponse extends ApiResponse<Feature[]> {
   features: Feature[];
+}
+
+export interface DeleteFeatureResponse extends ApiResponse<void> {}
+
+export interface ExecuteAgentResponse extends ApiResponse<{ response: string; executionId?: string; metadata?: Record<string, unknown> }> {
+  response: string;
+  executionId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // Feature endpoints
@@ -251,6 +281,12 @@ export const createFeature = (pageId: string, data: CreateFeaturePayload) =>
   apiRequest<CreateFeatureResponse>(`/api/agent-pages/${pageId}/features`, {
     method: "POST",
     body: JSON.stringify(data),
+  });
+
+export const materializeFeatureFromPlan = (pageId: string, plan: FeaturePlan) =>
+  apiRequest<CreateFeatureResponse>(`/api/agent-pages/${pageId}/features/materialize-plan`, {
+    method: "POST",
+    body: JSON.stringify({ plan }),
   });
 
 export const getPageFeatures = (pageId: string) =>
@@ -299,9 +335,33 @@ export const getFeatureInsights = (pageId: string, featureId: string) =>
   );
 
 // Feature plan endpoints
-export const getFeaturePlans = (pageId: string) =>
-  apiRequest<{ success: boolean; featurePlans: FeaturePlan[] }>(
+export const getFeaturePlans = async (pageId: string) => {
+  const response = await apiRequest<{ success: boolean; featurePlans: Array<FeaturePlan & { ui?: FeatureSectionSchema[] }> }>(
     `/api/agent-pages/${pageId}/feature-plans`
+  );
+
+  return {
+    ...response,
+    featurePlans: (response.featurePlans || []).map((plan) => ({
+      ...plan,
+      sections: Array.isArray(plan.sections)
+        ? plan.sections
+        : (Array.isArray(plan.ui) ? plan.ui : []),
+      layout:
+        plan.layout && typeof plan.layout === "object"
+          ? plan.layout
+          : { type: "vertical" as const },
+    })),
+  };
+};
+
+export const generateFeaturePlan = (pageId: string, prompt: string) =>
+  apiRequest<{ success: boolean; featurePlan: FeaturePlan }>(
+    `/api/agent-pages/${pageId}/feature-plans/generate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    }
   );
 
 export const createFeaturePlan = (pageId: string, plan: FeaturePlan) =>
@@ -312,3 +372,20 @@ export const createFeaturePlan = (pageId: string, plan: FeaturePlan) =>
       body: JSON.stringify(plan),
     }
   );
+
+// Workspace aggregate endpoint
+export interface WorkspaceData {
+  page: AgentPage;
+  agents: Agent[];
+  features: Feature[];
+  featurePlans: FeaturePlan[];
+  featureDataMap: Record<string, Array<{ _id: string; featureType: string; itemCount: number; aiSummary: string; updatedAt: string }>>;
+}
+
+export interface WorkspaceResponse extends ApiResponse<WorkspaceData> {
+  data: WorkspaceData;
+}
+
+/** Load complete workspace data in one request to reduce race conditions and sequential fetches */
+export const getWorkspaceData = (pageId: string) =>
+  apiRequest<WorkspaceResponse>(`/api/agent-pages/${pageId}/workspace`);

@@ -23,6 +23,10 @@ const featurePlanSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  layout: {
+    type: Object,
+    default: { type: 'vertical' }
+  },
   ui: {
     type: [Object],
     default: []

@@ -2,11 +2,10 @@ import { useMemo, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DynamicSectionShell } from "./DynamicSectionShell";
+import { getFeatureInsights } from "@/lib/agentPageApi";
 import {
   DynamicSection,
   getSectionOptions,
-  toRecordArray,
-  toStringArray,
   toStringValue,
 } from "./dynamicSectionUtils";
 
@@ -14,40 +13,57 @@ interface DynamicInsightPanelSectionProps {
   section: DynamicSection;
   featureId: string;
   featureName: string;
+  pageId?: string;
 }
 
 export const DynamicInsightPanelSection = ({
   section,
   featureId,
   featureName,
+  pageId,
 }: DynamicInsightPanelSectionProps) => {
-  const [insights, setInsights] = useState<string>("");
+  const [insights, setInsights] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const options = useMemo(() => getSectionOptions(section), [section]);
-  const configuredInsights = toStringArray(options.insights);
-  const insightList = configuredInsights.length
-    ? configuredInsights
-    : toRecordArray(options.items).map((item) => toStringValue(item.text, ""));
 
   const actionLabel = toStringValue(options.actionLabel, "Generate Insights");
   const loadingLabel = toStringValue(options.loadingLabel, "Analyzing...");
 
+  const buildFallbackInsights = () => {
+    const configured = Array.isArray(options.insights)
+      ? options.insights
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean)
+      : [];
+
+    if (configured.length > 0) {
+      return configured;
+    }
+
+    return [
+      `AI copilot is ready for ${featureName}. Add data or click generate to get live recommendations.`,
+      "The backend insight engine will summarize trends, patterns, and next steps for this feature.",
+    ];
+  };
+
   const handleGenerateInsights = async () => {
     setIsLoading(true);
     try {
-      // TODO: Connect with /features/:id/insights endpoint for live AI output.
-      if (insightList.length > 0) {
-        setInsights(insightList.map((line) => `- ${line}`).join("\n"));
+      if (!pageId) {
+        setInsights(buildFallbackInsights());
       } else {
-        setInsights(
-          [
-            `Feature "${featureName}" has no configured insight examples yet.`,
-            "Add entries and invoke AI insights to generate meaningful recommendations.",
-          ].join("\n")
-        );
+        const response = await getFeatureInsights(pageId, featureId);
+        const liveInsights = Array.isArray(response.insights)
+          ? response.insights.map((item) => String(item).trim()).filter(Boolean)
+          : [];
+
+        setInsights(liveInsights.length > 0 ? liveInsights : buildFallbackInsights());
       }
       console.log("[InsightPanel] Generate insights", { featureId, sectionId: section.id });
+    } catch (error) {
+      console.error("[InsightPanel] Failed to load insights:", error);
+      setInsights(buildFallbackInsights());
     } finally {
       setIsLoading(false);
     }
@@ -55,16 +71,23 @@ export const DynamicInsightPanelSection = ({
 
   return (
     <DynamicSectionShell section={section}>
-      {insights ? (
+      {insights.length > 0 ? (
         <div className="bg-card/60 rounded p-3 space-y-3">
           <div className="flex items-start gap-2">
             <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-            <div className="text-sm whitespace-pre-line text-foreground">{insights}</div>
+            <div className="text-sm whitespace-pre-line text-foreground space-y-2">
+              {insights.map((line, index) => (
+                <div key={`${line}-${index}`} className="flex gap-2">
+                  <span className="text-primary">•</span>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setInsights("")}
+            onClick={() => setInsights([])}
             className="w-full"
             disabled={isLoading}
           >

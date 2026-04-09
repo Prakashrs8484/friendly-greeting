@@ -21,6 +21,11 @@ const SUPPORTED_COMPONENTS = [
   'streakTracker',
   'metricBoard',
   'insightPanel',
+  'recommendationCards',
+  'nextStepPlanner',
+  'anomalyAlerts',
+  'semanticFilterRail',
+  'decisionPlaybook',
   // Legacy support for older saved blueprints.
   'chart',
   'summaryCard',
@@ -144,6 +149,12 @@ const featureSchema = new mongoose.Schema({
   originalInput: {
     type: String,
     required: true,
+  },
+  // Schema versioning for forward compatibility
+  schemaVersion: {
+    type: String,
+    default: '1.0',
+    enum: ['1.0'],
   },
   createdAt: {
     type: Date,

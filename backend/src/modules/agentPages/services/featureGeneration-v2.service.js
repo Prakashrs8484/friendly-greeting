@@ -55,6 +55,64 @@ async function generateFeature(pageId, ownerId, userInput) {
 }
 
 /**
+ * Create a feature directly from an approved plan/blueprint
+ * @param {string} pageId
+ * @param {string} ownerId
+ * @param {Object} plan
+ * @returns {Promise<Object>}
+ */
+async function createFeatureFromPlan(pageId, ownerId, plan) {
+  try {
+    const featureName = String(plan?.featureName || 'Custom Feature').trim();
+    const description = String(plan?.description || '').trim();
+    const layout = plan?.layout && typeof plan.layout === 'object'
+      ? plan.layout
+      : { type: 'vertical' };
+    const sections = Array.isArray(plan?.sections) ? plan.sections : [];
+    const dataModel = Array.isArray(plan?.dataModel) ? plan.dataModel : [];
+    const aiCapabilities = Array.isArray(plan?.aiCapabilities) ? plan.aiCapabilities : [];
+
+    if (!featureName) {
+      throw new Error('featureName is required for plan materialization');
+    }
+
+    if (sections.length === 0) {
+      throw new Error('sections are required for plan materialization');
+    }
+
+    const pageBlueprint = {
+      featureName,
+      description,
+      layout,
+      sections,
+      dataModel,
+      aiCapabilities,
+    };
+
+    const feature = new Feature({
+      pageId,
+      name: featureName,
+      description,
+      pageBlueprint,
+      category: 'functional',
+      originalInput: String(plan?.originalInput || featureName),
+      agentIds: []
+    });
+
+    const savedFeature = await feature.save();
+
+    return {
+      success: true,
+      feature: savedFeature,
+      message: `Feature "${featureName}" materialized from approved plan`
+    };
+  } catch (error) {
+    console.error('[Feature Generation] Error creating feature from plan:', error);
+    throw error;
+  }
+}
+
+/**
  * Create AI agents for a feature (optional)
  * @param {string} featureId - The Feature ID
  * @param {string} pageId - The Agent Page ID
@@ -139,14 +197,47 @@ async function getPageFeatures(pageId) {
 }
 
 /**
- * Delete a feature
+ * Delete a feature with full cascade cleanup
+ * Removes: feature, feature data, feature plan, feature-linked messages, and feature-bound agents
  * @param {string} featureId - The Feature ID
  * @returns {Promise<Object>} Deletion result
  */
 async function deleteFeature(featureId) {
   try {
+    const FeatureData = require('../models/featureData.model');
+    const FeaturePlan = require('../models/featurePlan.model');
+    const Message = require('../models/message.model');
+    const Agent = require('../models/agent.model');
+
+    // 1. Find the feature to get pageId and agentIds
+    const feature = await Feature.findById(featureId);
+    if (!feature) {
+      throw new Error('Feature not found');
+    }
+
+    // 2. Delete FeatureData for this feature
+    await FeatureData.deleteMany({ featureId });
+
+    // 3. Delete FeaturePlan for this feature
+    await FeaturePlan.deleteMany({ featureId });
+
+    // 4. Delete Messages linked to this feature (summaries, events, insights)
+    await Message.deleteMany({ featureId });
+
+    // 5. Delete Agents that are bound only to this feature
+    if (feature.agentIds && feature.agentIds.length > 0) {
+      // For now, delete all feature-bound agents. In future, could support multi-feature agents.
+      await Agent.deleteMany({ _id: { $in: feature.agentIds } });
+    }
+
+    // 6. Delete the Feature itself
     const result = await Feature.findByIdAndDelete(featureId);
-    console.log('[Feature Generation] Feature deleted:', featureId);
+    console.log('[Feature Generation] Feature deleted with cascade:', { 
+      featureId, 
+      deletedFeatureData: true, 
+      deletedMessages: true,
+      deletedAgents: feature.agentIds?.length || 0
+    });
     return result;
   } catch (error) {
     console.error('[Feature Generation] Error deleting feature:', error);
@@ -156,6 +247,7 @@ async function deleteFeature(featureId) {
 
 module.exports = {
   generateFeature,
+  createFeatureFromPlan,
   createAgentsForFeature,
   getFeature,
   getPageFeatures,

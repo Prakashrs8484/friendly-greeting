@@ -11,6 +11,7 @@ import { DynamicChartLineSection } from "./sections/DynamicChartLineSection";
 import { DynamicChartPieSection } from "./sections/DynamicChartPieSection";
 import { DynamicChartSection } from "./sections/DynamicChartSection";
 import { DynamicComparisonTableSection } from "./sections/DynamicComparisonTableSection";
+import { DynamicDecisionPlaybookSection } from "./sections/DynamicDecisionPlaybookSection";
 import { DynamicFilterBarSection } from "./sections/DynamicFilterBarSection";
 import { DynamicFormSection } from "./sections/DynamicFormSection";
 import { DynamicInsightPanelSection } from "./sections/DynamicInsightPanelSection";
@@ -18,7 +19,11 @@ import { DynamicKanbanSection } from "./sections/DynamicKanbanSection";
 import { DynamicKpiGridSection } from "./sections/DynamicKpiGridSection";
 import { DynamicListSection } from "./sections/DynamicListSection";
 import { DynamicMetricBoardSection } from "./sections/DynamicMetricBoardSection";
+import { DynamicNextStepPlannerSection } from "./sections/DynamicNextStepPlannerSection";
+import { DynamicAnomalyAlertsSection } from "./sections/DynamicAnomalyAlertsSection";
 import { DynamicProgressTrackerSection } from "./sections/DynamicProgressTrackerSection";
+import { DynamicRecommendationCardsSection } from "./sections/DynamicRecommendationCardsSection";
+import { DynamicSemanticFilterRailSection } from "./sections/DynamicSemanticFilterRailSection";
 import { DynamicStreakTrackerSection } from "./sections/DynamicStreakTrackerSection";
 import { DynamicSummaryCardSection } from "./sections/DynamicSummaryCardSection";
 import { DynamicTableSection } from "./sections/DynamicTableSection";
@@ -57,7 +62,12 @@ type SupportedComponentType =
   | "tagSelector"
   | "streakTracker"
   | "metricBoard"
-  | "insightPanel";
+  | "insightPanel"
+  | "recommendationCards"
+  | "nextStepPlanner"
+  | "anomalyAlerts"
+  | "semanticFilterRail"
+  | "decisionPlaybook";
 
 type LegacyComponentType = "chart" | "summaryCard";
 type ComponentType = SupportedComponentType | LegacyComponentType;
@@ -79,6 +89,7 @@ type DynamicSectionComponent = ReactComponentType<{
   section: DynamicSection;
   featureId: string;
   featureName: string;
+  pageId?: string;
 }>;
 
 const SECTION_COMPONENTS: Record<ComponentType, DynamicSectionComponent> = {
@@ -101,6 +112,11 @@ const SECTION_COMPONENTS: Record<ComponentType, DynamicSectionComponent> = {
   streakTracker: DynamicStreakTrackerSection,
   metricBoard: DynamicMetricBoardSection,
   insightPanel: DynamicInsightPanelSection,
+  recommendationCards: DynamicRecommendationCardsSection,
+  nextStepPlanner: DynamicNextStepPlannerSection,
+  anomalyAlerts: DynamicAnomalyAlertsSection,
+  semanticFilterRail: DynamicSemanticFilterRailSection,
+  decisionPlaybook: DynamicDecisionPlaybookSection,
   chart: DynamicChartSection,
   summaryCard: DynamicSummaryCardSection,
 };
@@ -182,6 +198,7 @@ export const DynamicFeatureRenderer = ({
 
   const sections = pageBlueprint.sections || [];
   const layout = pageBlueprint.layout;
+  const aiCapabilities = pageBlueprint.aiCapabilities || [];
 
   const handleDelete = async () => {
     if (!confirm(`Delete feature "${feature.name}"?`)) return;
@@ -216,6 +233,18 @@ export const DynamicFeatureRenderer = ({
         {feature.description ? (
           <p className="text-sm text-muted-foreground mt-1">{feature.description}</p>
         ) : null}
+        {aiCapabilities.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {aiCapabilities.map((capability) => (
+              <span
+                key={capability}
+                className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary"
+              >
+                AI {capability}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </CardHeader>
 
       <CardContent>
@@ -223,7 +252,7 @@ export const DynamicFeatureRenderer = ({
           <LayoutContainer layout={layout}>
             {sections.map((section, index) => {
               const componentKey = section.component as ComponentType;
-              const SectionComponent = SECTION_COMPONENTS[componentKey];
+              const SectionComponent = SECTION_COMPONENTS[componentKey] as ReactComponentType<Record<string, unknown>>;
 
               if (!SectionComponent) {
                 return (
@@ -240,6 +269,7 @@ export const DynamicFeatureRenderer = ({
                   section={section}
                   featureId={feature._id}
                   featureName={feature.name}
+                  pageId={feature.pageId}
                 />
               );
             })}

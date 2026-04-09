@@ -1,3 +1,4 @@
+const groq = require('../../system/services/groq.service');
 const { getPageFeatureData, updateAISummary } = require('./featureData.service');
 const { saveMessage } = require('./message.service');
 
@@ -51,43 +52,125 @@ const generateFeatureSummary = (featureType, data) => {
  * @param {Array} data - Feature data array
  * @returns {Array<string>} Array of insights
  */
-const generateFeatureInsights = (featureType, data) => {
+const generateFeatureInsights = async (featureType, data) => {
   if (!data || data.length === 0) {
     return [];
   }
 
-  const insights = [];
-  
-  switch (featureType) {
-    case 'ideas':
-      if (data.length > 5) {
-        insights.push('You have many ideas! Consider prioritizing the most impactful ones.');
+  const fallbackInsights = (() => {
+    const insights = [];
+
+    switch (featureType) {
+      case 'ideas':
+        if (data.length > 5) {
+          insights.push('You have many ideas. Prioritize the highest-value ones first.');
+        }
+        if (data.length > 10) {
+          insights.push('Cluster similar ideas to reveal stronger themes and opportunities.');
+        }
+        break;
+
+      case 'research-tracker':
+        {
+          const active = data.filter((item) => item.status === 'active').length;
+          const completed = data.filter((item) => item.status === 'completed').length;
+          if (active > 5) {
+            insights.push('You have many active research topics. Focus on 2-3 at a time.');
+          }
+          if (completed > 0 && active === 0) {
+            insights.push('Great work finishing research topics. Consider starting the next batch.');
+          }
+        }
+        break;
+
+      case 'todo':
+        {
+          const overdue = data.filter(
+            (item) => item.dueDate && new Date(item.dueDate) < new Date() && !item.completed
+          );
+          if (overdue.length > 0) {
+            insights.push(
+              `You have ${overdue.length} overdue task${overdue.length !== 1 ? 's' : ''}. Reprioritize the list.`
+            );
+          }
+        }
+        break;
+
+      case 'notes':
+        if (data.length > 5) {
+          insights.push('You are building a strong knowledge base. Add tags or folders to stay organized.');
+        }
+        break;
+
+      default:
+        insights.push(`${featureType} has ${data.length} item${data.length !== 1 ? 's' : ''}.`);
+    }
+
+    if (insights.length === 0) {
+      insights.push(`This ${featureType} feature is ready for deeper AI analysis once more data is added.`);
+    }
+
+    return insights;
+  })();
+
+  const compactData = JSON.stringify(data.slice(0, 20), null, 2).slice(0, 5000);
+  const prompt = `You are the embedded AI copilot inside a custom agent feature.
+
+Feature type: ${featureType}
+Task: Analyze the feature data and return 3 to 5 concise, actionable insights.
+
+Rules:
+- Return only a JSON array of strings.
+- Each insight must be specific, practical, and grounded in the provided data.
+- Include a recommendation, a trend/pattern note, and a next-step suggestion when possible.
+- If data is sparse, infer a useful observation rather than refusing.
+
+Feature data:
+${compactData}`;
+
+  const parseInsightArray = (text) => {
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed)
+        ? parsed.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+        : [];
+    } catch {
+      const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (!match) return [];
+      try {
+        const parsed = JSON.parse(match[1]);
+        return Array.isArray(parsed)
+          ? parsed.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+          : [];
+      } catch {
+        return [];
       }
-      if (data.length > 10) {
-        insights.push('Consider grouping similar ideas together to identify patterns.');
-      }
-      break;
-    
-    case 'research-tracker':
-      const active = data.filter(item => item.status === 'active').length;
-      if (active > 5) {
-        insights.push('You have many active research topics. Consider focusing on 2-3 at a time.');
-      }
-      const completed = data.filter(item => item.status === 'completed').length;
-      if (completed > 0 && active === 0) {
-        insights.push('Great work completing your research! Time to start new topics.');
-      }
-      break;
-    
-    case 'todo':
-      const overdue = data.filter(item => item.dueDate && new Date(item.dueDate) < new Date() && !item.completed);
-      if (overdue.length > 0) {
-        insights.push(`You have ${overdue.length} overdue task${overdue.length !== 1 ? 's' : ''}. Consider reprioritizing.`);
-      }
-      break;
+    }
+  };
+
+  try {
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: 'You generate concise, high-signal feature insights as a JSON array of strings only.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      top_p: 0.9,
+      max_tokens: 500,
+    });
+
+    const content = response.choices[0]?.message?.content?.trim() || '';
+    const insights = parseInsightArray(content);
+    return insights.length > 0 ? insights : fallbackInsights;
+  } catch (error) {
+    console.error('[Feature AI Service] Error generating AI insights:', error.message);
+    return fallbackInsights;
   }
-  
-  return insights;
 };
 
 /**

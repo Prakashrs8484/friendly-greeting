@@ -1,5 +1,6 @@
 const {
   generateFeature,
+  createFeatureFromPlan,
   getPageFeatures,
   deleteFeature
 } = require('../services/featureGeneration-v2.service');
@@ -85,6 +86,73 @@ exports.createFeature = async (req, res) => {
       success: false,
       message: err.message || 'Failed to create feature',
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+};
+
+/**
+ * Materialize feature from an approved plan (no regeneration)
+ */
+exports.materializeFeatureFromPlan = async (req, res) => {
+  try {
+    const AgentPage = require('../models/agentPage.model');
+    const pageId = req.params.pageId;
+    const plan = req.body?.plan;
+
+    if (!plan || typeof plan !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'plan payload is required'
+      });
+    }
+
+    const page = await AgentPage.findOne({ _id: pageId, ownerId: req.user._id });
+    if (!page) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agent page not found'
+      });
+    }
+
+    const result = await createFeatureFromPlan(pageId, req.user._id, plan);
+    const feature = result.feature;
+
+    try {
+      await handleFeatureEvent(pageId, feature._id, 'created', {
+        name: feature.name,
+        agentIds: feature.agentIds,
+        pageBlueprint: feature.pageBlueprint
+      });
+    } catch (eventError) {
+      console.warn('[Feature Controller] Materialize event failed:', eventError.message);
+    }
+
+    return res.status(201).json({
+      success: true,
+      featureId: feature._id,
+      message: result.message,
+      feature: {
+        _id: feature._id,
+        pageId: feature.pageId,
+        name: feature.name,
+        description: feature.description,
+        pageBlueprint: feature.pageBlueprint,
+        agentIds: feature.agentIds || [],
+        originalInput: feature.originalInput,
+        createdAt: feature.createdAt,
+        updatedAt: feature.updatedAt
+      }
+    });
+  } catch (err) {
+    console.error('[Feature Controller] Error materializing feature:', {
+      error: err.message,
+      stack: err.stack,
+      pageId: req.params.pageId,
+      userId: req.user?._id
+    });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to materialize feature from plan',
     });
   }
 };

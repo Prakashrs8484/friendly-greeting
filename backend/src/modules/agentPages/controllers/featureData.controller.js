@@ -195,7 +195,7 @@ exports.getFeatureInsights = async (req, res) => {
       });
     }
 
-    const insights = generateFeatureInsights(feature.type, featureData.data);
+    const insights = await generateFeatureInsights(feature.type, featureData.data);
 
     return res.json({
       success: true,

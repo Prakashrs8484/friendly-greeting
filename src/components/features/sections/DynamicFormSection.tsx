@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DynamicSectionShell } from "./DynamicSectionShell";
+import { useSectionData } from "@/hooks/useSectionData";
 import {
   DynamicField,
   DynamicSection,
@@ -16,6 +17,7 @@ interface DynamicFormSectionProps {
   section: DynamicSection;
   featureId: string;
   featureName: string;
+  pageId: string;
 }
 
 const normalizeFieldOptions = (
@@ -41,9 +43,16 @@ export const DynamicFormSection = ({
   section,
   featureId,
   featureName,
+  pageId,
 }: DynamicFormSectionProps) => {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data, addItem, isLoading } = useSectionData(pageId, featureId);
+
+  useEffect(() => {
+    // Load data on component mount
+    return () => {};
+  }, []);
 
   const fields = Array.isArray(section.fields) ? section.fields : [];
   const sectionOptions = useMemo(() => getSectionOptions(section), [section]);
@@ -71,14 +80,8 @@ export const DynamicFormSection = ({
         }
       }
 
-      // TODO: Persist form payload to /features/:id/data when data sync is enabled.
-      console.log("[DynamicFormSection] Submit payload:", {
-        featureId,
-        featureName,
-        sectionId: section.id,
-        data: formData,
-      });
-
+      // Persist form payload to backend with useSectionData hook
+      await addItem(formData);
       setFormData({});
     } finally {
       setIsSubmitting(false);
